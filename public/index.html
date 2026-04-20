@@ -964,20 +964,54 @@ async function lookupParcel() {
   }
 
   if (!p) {
-    // Show available parcels for this PLZ area
-    const suggestions = [];
-    for (const [key, list] of Object.entries(PARCELS)) {
-      if (selectedPLZ[2] === 'TG' && ['Frauenfeld','Weinfelden','Amriswil'].includes(key)) suggestions.push(...list.map(x=>key+': '+x.n));
-      if (selectedPLZ[2] === 'SG' && ['StGallen','Gossau','Wil'].includes(key)) suggestions.push(...list.map(x=>key+': '+x.n));
-      if (selectedPLZ[2] === 'AI' && key==='Appenzell') suggestions.push(...list.map(x=>key+': '+x.n));
-      if (selectedPLZ[2] === 'AR' && key==='Herisau') suggestions.push(...list.map(x=>key+': '+x.n));
+    // Try to find by municipality name match in PARCELS (any TG/SG/AI/AR key)
+    const kantParcels = Object.entries(PARCELS)
+      .filter(([key]) => {
+        // Match by canton from PARCELS keys
+        const tgKeys = ['Frauenfeld','Weinfelden','Amriswil','Romanshorn','Kreuzlingen','Arbon','Bischofszell','Sirnach','Münchwilen','Aadorf'];
+        const sgKeys = ['StGallen','Gossau','Wil'];
+        if (selectedPLZ[2]==='TG') return tgKeys.includes(key);
+        if (selectedPLZ[2]==='SG') return sgKeys.includes(key);
+        if (selectedPLZ[2]==='AI') return key==='Appenzell';
+        if (selectedPLZ[2]==='AR') return key==='Herisau';
+        return false;
+      });
+    
+    // Try matching by selected municipality name
+    let matchedList = null;
+    for (const [key, list] of kantParcels) {
+      if (selectedPLZ[1].toLowerCase().includes(key.toLowerCase()) ||
+          key.toLowerCase().includes(selectedPLZ[1].toLowerCase().split(' ')[0].toLowerCase())) {
+        matchedList = list;
+        break;
+      }
     }
-    out.innerHTML = `
-      <div class="alert alert-info" style="margin-top:1rem">
-        ⚠️ Parzelle <strong>${num}</strong> in <strong>${selectedPLZ[1]}</strong> nicht in Mock-DB.<br>
-        <span style="font-size:0.82rem">In Kanton ${selectedPLZ[2]} verfügbare Testparzellen: ${suggestions.slice(0,8).join(' · ')}</span><br>
-        <span style="font-size:0.82rem;color:var(--gt)">Phase 3: Echte API-Anbindung kantonaler Geoportale</span>
-      </div>`;
+
+    if (matchedList) {
+      // Municipality matched but parcel number wrong
+      out.innerHTML = `
+        <div style="background:#fff8e1;border-left:4px solid #ff9800;border-radius:6px;padding:1.25rem;margin-top:1rem">
+          <strong>⚠️ Parzellennummer ${num} nicht gefunden in ${selectedPLZ[1]}</strong><br>
+          <span style="font-size:0.875rem;color:var(--gt)">
+            Verfügbare Testnummern: ${matchedList.map(x=>'<strong>'+x.n+'</strong>').join(' · ')}
+          </span>
+          <div style="margin-top:1rem;display:flex;gap:0.5rem;flex-wrap:wrap">
+            <button class="btn-red" onclick="goTo('surfaces')" style="font-size:0.85rem">→ Manuell eingeben</button>
+            <button class="btn-white" onclick="document.getElementById('fileIn').click()" style="font-size:0.85rem">📄 Plan hochladen</button>
+          </div>
+        </div>`;
+    } else {
+      out.innerHTML = `
+        <div style="background:#fff8e1;border-left:4px solid #ff9800;border-radius:6px;padding:1.25rem;margin-top:1rem">
+          <strong>⚠️ Parzelle ${num} in ${selectedPLZ[1]} nicht gefunden</strong><br>
+          <span style="font-size:0.875rem;color:var(--gt)">
+            Bitte überprüfen Sie die Parzellennummer oder geben Sie die Daten manuell ein.
+          </span>
+          <div style="margin-top:1rem;display:flex;gap:0.5rem;flex-wrap:wrap">
+            <button class="btn-red" onclick="goTo('surfaces')" style="font-size:0.85rem">→ Daten manuell eingeben</button>
+            <button class="btn-white" onclick="document.getElementById('fileIn').click()" style="font-size:0.85rem">📄 Plan hochladen (KI-Analyse)</button>
+          </div>
+        </div>`;
     return;
   }
 
