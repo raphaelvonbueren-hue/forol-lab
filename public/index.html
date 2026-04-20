@@ -1,0 +1,2531 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FOROL research lab</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+<style>
+:root {
+  --red:#d32f2f; --red2:#b71c1c; --bg:#f5f5f5; --gt:#666;
+  --dk:#1a1a1a; --br:#e0e0e0; --gn:#4caf50; --bl:#2196f3;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--dk);line-height:1.6}
+.app{display:flex;min-height:100vh}
+
+/* SIDEBAR */
+.sidebar{width:220px;background:white;border-right:1px solid var(--br);padding:1.5rem 0;position:fixed;height:100vh;overflow-y:auto}
+.logo{padding:0 1.5rem 1.5rem;border-bottom:1px solid var(--br);margin-bottom:1rem}
+.logo-text{font-size:1.5rem;font-weight:700;color:var(--red);letter-spacing:2px}
+.logo-sub{font-size:0.7rem;color:var(--gt);margin-top:2px;letter-spacing:1px}
+.nav-sec-title{font-size:0.7rem;text-transform:uppercase;color:var(--gt);padding:0 1.5rem;margin-bottom:0.4rem;font-weight:600;letter-spacing:0.5px}
+.nav-item{padding:0.7rem 1.5rem;color:var(--dk);cursor:pointer;display:flex;align-items:center;gap:0.75rem;font-size:0.9rem;transition:all 0.2s;border-left:3px solid transparent}
+.nav-item:hover{background:var(--bg)}
+.nav-item.active{background:#fff5f5;border-left-color:var(--red);color:var(--red);font-weight:600}
+.nav-sec{margin-bottom:1.5rem}
+
+/* MAIN */
+.main{margin-left:220px;flex:1;padding:2rem}
+.page{display:none}.page.active{display:block;animation:fade 0.3s ease}
+@keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+/* HEADER */
+.header{background:white;border-radius:8px;padding:2rem;margin-bottom:1.5rem;box-shadow:0 1px 3px rgba(0,0,0,0.08)}
+.header h1{font-size:1.75rem;font-weight:700;margin-bottom:0.25rem}
+.header p{color:var(--gt);font-size:0.9rem}
+
+/* CARDS */
+.card{background:white;border-radius:8px;padding:1.5rem;margin-bottom:1.5rem;box-shadow:0 1px 3px rgba(0,0,0,0.08)}
+.card-title{font-size:0.95rem;font-weight:600;margin-bottom:1.25rem;display:flex;align-items:center;gap:0.5rem}
+
+/* FORMS */
+.form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1.25rem}
+.fg{display:flex;flex-direction:column}
+label{font-size:0.82rem;font-weight:500;color:var(--dk);margin-bottom:0.4rem}
+input,select,textarea{font-family:'Inter',sans-serif;padding:0.65rem;border:1px solid var(--br);border-radius:6px;font-size:0.9rem;transition:all 0.2s;background:white;width:100%}
+input:focus,select:focus{outline:none;border-color:var(--red);box-shadow:0 0 0 3px rgba(211,47,47,0.1)}
+
+/* BUTTONS */
+button{font-family:'Inter',sans-serif;padding:0.65rem 1.25rem;border:none;border-radius:6px;font-size:0.85rem;font-weight:600;cursor:pointer;transition:all 0.2s}
+.btn-red{background:var(--red);color:white}
+.btn-red:hover{background:var(--red2);transform:translateY(-1px);box-shadow:0 4px 12px rgba(211,47,47,0.3)}
+.btn-white{background:white;color:var(--dk);border:1px solid var(--br)}
+.btn-white:hover{background:var(--bg)}
+.btn-green{background:var(--gn);color:white}
+.btn-green:hover{background:#388e3c}
+.btn-group{display:flex;gap:0.75rem;margin-top:1.5rem;flex-wrap:wrap}
+
+/* REGION CARDS */
+.regions{display:grid;grid-template-columns:repeat(4,1fr);gap:1rem}
+.rcard{background:white;border:2px solid var(--br);padding:1rem;text-align:center;border-radius:6px;cursor:pointer;transition:all 0.2s}
+.rcard:hover{border-color:var(--red)}
+.rcard.sel{background:var(--red);color:white;border-color:var(--red)}
+.rcard .rfactor{font-size:0.8rem;margin-top:0.3rem;opacity:0.75}
+
+/* BUILDING TABS */
+.btabs{display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:1rem}
+.btab{padding:0.6rem 1.2rem;border:2px solid var(--br);border-radius:6px;cursor:pointer;font-size:0.85rem;font-weight:600;transition:all 0.2s;background:white}
+.btab.sel{background:var(--red);color:white;border-color:var(--red)}
+.btab:hover:not(.sel){border-color:var(--red)}
+
+/* BKP TABLE */
+.bkp-section{background:white;border:1px solid var(--br);border-radius:8px;margin-bottom:1rem;overflow:hidden}
+.bkp-sec-header{padding:0.9rem 1.25rem;background:#fafafa;border-bottom:1px solid var(--br);cursor:pointer;display:flex;justify-content:space-between;align-items:center;user-select:none}
+.bkp-sec-header:hover{background:#f0f0f0}
+.bkp-sec-title{font-weight:600;font-size:0.95rem;display:flex;align-items:center;gap:0.75rem}
+.bkp-sec-total{font-weight:700;color:var(--red);font-size:0.95rem}
+.bkp-subsec{background:#f9f9f9;border-bottom:1px solid var(--br);padding:0.5rem 1.25rem}
+.bkp-subsec-title{font-size:0.8rem;font-weight:600;color:var(--gt);text-transform:uppercase;letter-spacing:0.5px;padding:0.4rem 0}
+.bkp-row{display:grid;grid-template-columns:70px 1fr 110px 70px 110px 110px;gap:0.75rem;align-items:center;padding:0.6rem 1.25rem;border-bottom:1px solid var(--br);font-size:0.85rem;transition:background 0.15s}
+.bkp-row:hover{background:#fafafa}
+.bkp-row:last-child{border-bottom:none}
+.bkp-num{font-weight:700;color:var(--red);font-size:0.8rem;font-variant-numeric:tabular-nums}
+.bkp-name{color:var(--dk)}
+.bkp-qty input{width:100%;padding:0.4rem 0.5rem;font-size:0.85rem;text-align:right}
+.bkp-unit{color:var(--gt);font-size:0.8rem}
+.bkp-price{color:var(--gt);text-align:right;font-size:0.82rem}
+.bkp-total{font-weight:700;text-align:right;color:var(--dk)}
+.bkp-auto{background:#e8f5e9!important}
+.bkp-ai{background:#f3e5f5!important}
+.bkp-ai .bkp-num{color:#9c27b0!important}
+.bkp-header-row{display:grid;grid-template-columns:70px 1fr 110px 70px 110px 110px;gap:0.75rem;padding:0.5rem 1.25rem;background:#f5f5f5;border-bottom:1px solid var(--br);font-size:0.75rem;font-weight:600;color:var(--gt);text-transform:uppercase}
+
+/* SHARED / PER-BUILDING BADGE */
+.badge{display:inline-block;padding:0.15rem 0.5rem;border-radius:10px;font-size:0.68rem;font-weight:600}
+.badge-green{background:#e8f5e9;color:#2e7d32}
+.badge-blue{background:#e3f2fd;color:#1565c0}
+.badge-red{background:#ffebee;color:var(--red)}
+
+/* COST SUMMARY */
+.cost-box{background:white;border-radius:8px;padding:2rem;border:2px solid var(--br);margin-top:1.5rem}
+.cost-row{display:flex;justify-content:space-between;padding:0.7rem 0;border-bottom:1px solid var(--br);font-size:0.9rem}
+.cost-row:last-child{border-bottom:none;font-size:1.2rem;font-weight:700;color:var(--red);border-top:2px solid var(--red);padding-top:1rem;margin-top:0.5rem}
+.cost-label{font-weight:500}
+.cost-val{font-weight:700}
+
+/* OVERVIEW TABLE */
+.ov-table{width:100%;border-collapse:collapse;font-size:0.875rem}
+.ov-table th{background:#f5f5f5;padding:0.6rem 1rem;text-align:left;font-weight:600;font-size:0.75rem;text-transform:uppercase;color:var(--gt);border-bottom:2px solid var(--br)}
+.ov-table td{padding:0.7rem 1rem;border-bottom:1px solid var(--br)}
+.ov-table tr:last-child td{border-bottom:none}
+.ov-table tr:hover td{background:#fafafa}
+
+/* ALERTS */
+.alert{padding:0.9rem 1.2rem;border-radius:6px;margin-bottom:1rem;font-size:0.875rem}
+.alert-info{background:#e3f2fd;border-left:4px solid var(--bl);color:#0d47a1}
+.alert-green{background:#e8f5e9;border-left:4px solid var(--gn);color:#1b5e20}
+
+/* UPLOAD */
+.upload-zone{border:2px dashed var(--br);border-radius:6px;padding:2rem;text-align:center;cursor:pointer;transition:all 0.2s}
+.upload-zone:hover{border-color:var(--red);background:#fff5f5}
+
+/* LOOKUP */
+.lookup-box{background:#f9f9f9;border:1px solid var(--br);border-radius:6px;padding:1.25rem}
+.lookup-row{display:grid;grid-template-columns:1fr 1fr auto;gap:1rem;align-items:end}
+
+/* RESULT CARD */
+.result-card{background:linear-gradient(135deg,#e53935,#c62828);color:white;padding:1.25rem;border-radius:6px;margin-top:1rem}
+.result-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:0.75rem;margin-top:0.75rem}
+.result-item{background:rgba(255,255,255,0.15);padding:0.6rem 0.75rem;border-radius:4px}
+.result-item-label{font-size:0.72rem;opacity:0.85;text-transform:uppercase;font-weight:500}
+.result-item-value{font-size:1.15rem;font-weight:700;margin-top:0.1rem}
+
+/* LOADING */
+.loading-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.5);display:none;align-items:center;justify-content:center;z-index:9999}
+.loading-overlay.on{display:flex}
+.loading-box{background:white;padding:2rem;border-radius:8px;text-align:center;min-width:280px}
+.spinner{width:36px;height:36px;border:3px solid #f3f3f3;border-top:3px solid var(--red);border-radius:50%;animation:spin 0.9s linear infinite;margin:0 auto 1rem}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* MOBILE */
+@media(max-width:768px){
+  .sidebar{display:none}.main{margin-left:0}
+  .form-grid{grid-template-columns:1fr}.regions{grid-template-columns:repeat(2,1fr)}
+  .bkp-row{grid-template-columns:1fr 1fr}.bkp-header-row{display:none}
+}
+</style>
+</head>
+<body>
+<div class="loading-overlay" id="loader">
+  <div class="loading-box">
+    <div class="spinner"></div>
+    <strong>Daten werden geladen…</strong>
+    <p id="loader-msg" style="color:var(--gt);font-size:0.875rem;margin-top:0.5rem"></p>
+  </div>
+</div>
+
+<div class="app">
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="logo">
+      <div class="logo-text">FOROL</div>
+      <div class="logo-sub">RESEARCH LAB</div>
+    </div>
+    <div class="nav-sec">
+      <div class="nav-sec-title">Projekt</div>
+      <div class="nav-item active" id="nav-project" onclick="goTo('project')">
+        <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20"><path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2H3V4zM3 9h14v7a1 1 0 01-1 1H4a1 1 0 01-1-1V9z"/></svg>
+        Projektdaten
+      </div>
+      <div class="nav-item" id="nav-surfaces" onclick="goTo('surfaces')">
+        <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20"><path d="M2 6a2 2 0 012-2h12a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg>
+        Gebäude &amp; Flächen
+      </div>
+      <div class="nav-item" id="nav-bkp" onclick="goTo('bkp')">
+        <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20"><path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/><path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clip-rule="evenodd"/></svg>
+        BKP Kalkulation
+      </div>
+      <div class="nav-item" id="nav-summary" onclick="goTo('summary')">
+        <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20"><path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"/></svg>
+        Zusammenfassung
+      </div>
+      <div class="nav-item" id="nav-excavation" onclick="goTo('excavation')">
+        <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h6a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clip-rule="evenodd"/></svg>
+        Erdmassen
+      </div>
+      <div class="nav-item" id="nav-utilization" onclick="goTo('utilization')">
+        <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a8 8 0 100 16A8 8 0 0010 2zm0 14a6 6 0 110-12 6 6 0 010 12z"/></svg>
+        Ausnützung
+      </div>
+      <div class="nav-item" id="nav-prices" onclick="goTo('prices')">
+        <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M17.707 9.293a1 1 0 010 1.414l-7 7a1 1 0 01-1.414 0l-7-7A.997.997 0 012 10V5a3 3 0 013-3h5c.256 0 .512.098.707.293l7 7zM5 6a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"/></svg>
+        Eigene Preise
+      </div>
+    </div>
+    <div class="nav-sec">
+      <div class="nav-sec-title">Regionen</div>
+      <div style="padding:0 1.5rem;font-size:0.8rem;color:var(--gt)">TG · SG · AI · AR</div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+
+    <!-- PAGE: PROJEKT -->
+    <div class="page active" id="page-project">
+      <div class="header">
+        <h1>Neue Baukostenanalyse</h1>
+        <p>Projektdaten erfassen · Parzelle suchen · Plan hochladen</p>
+      </div>
+
+      <div class="card">
+        <div class="card-title">🔍 Parzellen-Recherche <span class="badge badge-green">AUTO</span></div>
+        <div class="lookup-box">
+          <div style="display:grid;grid-template-columns:130px 1fr 1fr auto;gap:1rem;align-items:end">
+            <div class="fg">
+              <label>Postleitzahl</label>
+              <input id="pPLZ" placeholder="z.B. 8500" maxlength="4" oninput="onPLZInput(this.value)" style="font-size:1.1rem;font-weight:600;letter-spacing:1px">
+            </div>
+            <div class="fg">
+              <label>Gemeinde</label>
+              <div id="plzResult" style="padding:0.65rem;border:1px solid var(--br);border-radius:6px;background:#f9f9f9;font-size:0.9rem;min-height:2.5rem;color:var(--gt)">wird automatisch gefüllt</div>
+            </div>
+            <div class="fg">
+              <label>Parzellennummer</label>
+              <input id="pNum" placeholder="z.B. 1234">
+            </div>
+            <button class="btn-red" onclick="lookupParcel()" style="height:fit-content">Suchen</button>
+          </div>
+          <div id="plzMatches" style="margin-top:0.5rem"></div>
+          <div id="lookupResult"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">
+          🤖 KI-Plan-Analyse
+          <span class="badge badge-green">CLAUDE VISION</span>
+        </div>
+        <div class="alert alert-info" style="margin-bottom:1rem;font-size:0.85rem">
+          Laden Sie Grundrisse, Schnitte und Fassadenpläne hoch. Claude liest automatisch:
+          Raumflächen · Gebäudelängen &amp; -breiten · Geschosshöhen · Raumhöhen · Fensteranzahl &amp; -grössen
+        </div>
+        <div id="uploadZoneMain" class="upload-zone"
+             ondragover="event.preventDefault();this.style.borderColor='var(--red)'"
+             ondragleave="this.style.borderColor='var(--br)'"
+             ondrop="handleDrop(event)"
+             onclick="document.getElementById('fileIn').click()"
+             style="margin-bottom:1rem">
+          <div style="font-size:2.5rem;margin-bottom:0.5rem">📐</div>
+          <strong>Pläne hierher ziehen oder klicken</strong>
+          <p style="color:var(--gt);font-size:0.85rem;margin-top:0.25rem">
+            PDF (mehrseitig), PNG, JPG — Mehrere Pläne gleichzeitig möglich
+          </p>
+          <input type="file" id="fileIn" accept=".pdf,.png,.jpg,.jpeg" multiple style="display:none">
+        </div>
+        <div id="fileList" style="display:none;margin-bottom:1rem">
+          <div style="font-size:0.82rem;font-weight:600;color:var(--gt);text-transform:uppercase;margin-bottom:0.5rem">Hochgeladene Pläne</div>
+          <div id="fileItems"></div>
+          <button class="btn-red" onclick="analyzeAllPlans()" style="margin-top:1rem;width:100%">
+            🤖 Alle Pläne mit Claude analysieren
+          </button>
+        </div>
+        <div id="aiResult"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Grunddaten</div>
+        <div class="form-grid">
+          <div class="fg"><label>Projektname *</label><input id="projName" placeholder="z.B. Wohnüberbauung Birkenweg"></div>
+          <div class="fg"><label>Projektnummer</label><input id="projNum" placeholder="z.B. 2025-001"></div>
+          <div class="fg"><label>Bauherr *</label><input id="projClient" placeholder="Name des Bauherrn"></div>
+          <div class="fg"><label>Standort *</label><input id="projLocation" placeholder="z.B. Frauenfeld TG"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Region &amp; Preisfaktor</div>
+        <div class="regions">
+          <div class="rcard sel" data-r="TG" onclick="selRegion(this,'TG',1.00)"><strong>Thurgau</strong><div class="rfactor">Faktor 1.00</div></div>
+          <div class="rcard" data-r="SG" onclick="selRegion(this,'SG',1.05)"><strong>St. Gallen</strong><div class="rfactor">Faktor 1.05</div></div>
+          <div class="rcard" data-r="AI" onclick="selRegion(this,'AI',1.08)"><strong>Appenzell I.Rh.</strong><div class="rfactor">Faktor 1.08</div></div>
+          <div class="rcard" data-r="AR" onclick="selRegion(this,'AR',1.03)"><strong>Appenzell A.Rh.</strong><div class="rfactor">Faktor 1.03</div></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Projekttyp</div>
+        <div class="form-grid">
+          <div class="fg"><label>Typ</label>
+            <select id="projType"><option value="new">Neubau</option><option value="ren">Umbau/Sanierung</option><option value="ext">Erweiterung</option></select>
+          </div>
+          <div class="fg"><label>Ausbaustandard</label>
+            <select id="projFinish"><option value="basic">Einfach</option><option value="std" selected>Standard</option><option value="high">Gehoben</option><option value="lux">Luxus</option></select>
+          </div>
+          <div class="fg"><label>Parzellenfläche (m²)</label><input type="number" id="parcelArea" placeholder="z.B. 1200"></div>
+          <div class="fg"><label>Baugrundklasse</label>
+            <select id="soilClass"><option value="1">Klasse 1 – leicht lösbar</option><option value="2" selected>Klasse 2 – mittelschwer</option><option value="3">Klasse 3 – schwer lösbar</option></select>
+          </div>
+        </div>
+      </div>
+
+      <div class="btn-group">
+        <button class="btn-red" onclick="goTo('surfaces')">Weiter zu Gebäude &amp; Flächen →</button>
+      </div>
+    </div>
+
+    <!-- PAGE: GEBÄUDE & FLÄCHEN -->
+    <div class="page" id="page-surfaces">
+      <div class="header">
+        <h1 id="surfHeader">Gebäude &amp; Flächen</h1>
+        <p id="surfSub">Einzelgebäude oder Wohnüberbauung mit mehreren Blöcken</p>
+      </div>
+
+      <div class="card">
+        <div class="card-title" style="justify-content:space-between">
+          <span>🏘️ Gebäude auf der Parzelle</span>
+          <button class="btn-red" onclick="addBuilding()">+ Gebäude hinzufügen</button>
+        </div>
+        <div id="btabs" class="btabs"></div>
+        <div id="devOverview"></div>
+      </div>
+
+      <div id="buildingForm" class="card">
+        <div class="card-title" style="justify-content:space-between">
+          <span id="bFormTitle">Gebäude 1 – Details</span>
+          <button class="btn-white" style="color:var(--red);border-color:var(--red)" onclick="removeBuilding()">🗑 Löschen</button>
+        </div>
+        <div class="form-grid">
+          <div class="fg"><label>Name / Bezeichnung</label><input id="bName" placeholder="z.B. Block A" onchange="saveBField('name',this.value)"></div>
+          <div class="fg"><label>Bauweise</label>
+            <select id="bType" onchange="saveBField('type',this.value)">
+              <option value="timber">Holzbau</option><option value="solid">Massivbau</option><option value="hybrid">Hybridbau</option>
+            </select>
+          </div>
+          <div class="fg"><label>Anzahl Geschosse</label><input type="number" id="bFloors" value="2" min="1" onchange="saveBField('floors',+this.value);autoCalc()"></div>
+          <div class="fg"><label>Geschosshöhe (m)</label><input type="number" id="bHeight" value="2.8" step="0.1" onchange="saveBField('height',+this.value)"></div>
+          <div class="fg"><label>Länge (m)</label><input type="number" id="bLen" value="12" step="0.5" onchange="saveBField('len',+this.value);autoCalc()"></div>
+          <div class="fg"><label>Breite (m)</label><input type="number" id="bWid" value="10" step="0.5" onchange="saveBField('wid',+this.value);autoCalc()"></div>
+        </div>
+
+        <div style="margin-top:1.25rem;padding-top:1.25rem;border-top:1px solid var(--br)">
+          <div class="card-title" style="margin-bottom:1rem">Flächen (oder automatisch berechnen)</div>
+          <div class="form-grid">
+            <div class="fg"><label>Wohnfläche (m²)</label><input type="number" id="bLiving" step="0.1" placeholder="wird berechnet" onchange="saveBField('living',+this.value)"></div>
+            <div class="fg"><label>Küche (m²)</label><input type="number" id="bKitchen" step="0.1" placeholder="wird berechnet" onchange="saveBField('kitchen',+this.value)"></div>
+            <div class="fg"><label>Nasszellen (m²)</label><input type="number" id="bBath" step="0.1" placeholder="wird berechnet" onchange="saveBField('bath',+this.value)"></div>
+            <div class="fg"><label>Parkett (m²)</label><input type="number" id="bParkett" step="0.1" placeholder="wird berechnet" onchange="saveBField('parkett',+this.value)"></div>
+            <div class="fg"><label>Platten (m²)</label><input type="number" id="bTiles" step="0.1" placeholder="wird berechnet" onchange="saveBField('tiles',+this.value)"></div>
+          </div>
+          <div class="btn-group" style="margin-top:1rem">
+            <button class="btn-white" onclick="autoCalc()">↻ Flächen automatisch berechnen</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="btn-group">
+        <button class="btn-white" onclick="goTo('project')">← Zurück</button>
+        <button class="btn-red" onclick="goTo('bkp')">Weiter zur BKP Kalkulation →</button>
+      </div>
+    </div>
+
+    <!-- PAGE: BKP -->
+    <div class="page" id="page-bkp">
+      <div class="header">
+        <h1>BKP Kalkulation</h1>
+        <p id="bkpHeaderSub">4-stellige Baukostenpositionen nach CRB-Standard</p>
+      </div>
+      <div class="btn-group" style="margin-bottom:1.5rem">
+        <button class="btn-red" onclick="buildBKP()">↻ Kalkulation neu berechnen</button>
+        <button class="btn-white" onclick="goTo('summary')">→ Zur Zusammenfassung</button>
+      </div>
+      <div id="bkpTree"></div>
+    </div>
+
+    <!-- PAGE: SUMMARY -->
+    <div class="page" id="page-summary">
+      <div class="header">
+        <h1>Zusammenfassung</h1>
+        <p>Gesamtkostenübersicht Ihrer Überbauung</p>
+      </div>
+      <div class="card" id="summaryInfo"></div>
+      <div class="cost-box" id="costBox"></div>
+      <div class="btn-group">
+        <button class="btn-white" onclick="goTo('bkp')">← Zurück</button>
+        <button class="btn-green" onclick="exportPDF()">📄 PDF exportieren</button>
+        <button class="btn-red" onclick="sendFOROL()">🚀 An FOROL Futur</button>
+      </div>
+    </div>
+
+    <!-- PAGE: ERDMASSEN -->
+    <div class="page" id="page-excavation">
+      <div class="header">
+        <h1>Erdmassen-Kalkulator</h1>
+        <p>Aushubvolumen · Materialtransport · Kostenschätzung BKP 1.2 · Querschnitt-Visualisierung</p>
+      </div>
+      <div class="card">
+        <div class="card-title">📐 Baugrubendimensionen</div>
+        <div class="form-grid">
+          <div class="fg"><label>Gebäudelänge + Arbeitsraum (m)</label>
+            <input type="number" id="exLen" placeholder="z.B. 16" oninput="calcExcavation()"></div>
+          <div class="fg"><label>Gebäudebreite + Arbeitsraum (m)</label>
+            <input type="number" id="exWid" placeholder="z.B. 14" oninput="calcExcavation()"></div>
+          <div class="fg"><label>Aushubtiefe (m)</label>
+            <input type="number" id="exDepth" placeholder="z.B. 2.5" step="0.1" oninput="calcExcavation()"></div>
+          <div class="fg"><label>Böschungswinkel (°)</label>
+            <input type="number" id="exSlope" value="45" step="5" oninput="calcExcavation()"></div>
+          <div class="fg"><label>Humusschicht (cm)</label>
+            <input type="number" id="exHumus" value="30" oninput="calcExcavation()"></div>
+          <div class="fg"><label>Auflockerungsfaktor</label>
+            <select id="exFactor" onchange="calcExcavation()">
+              <option value="1.10">1.10 – Leichter Boden</option>
+              <option value="1.25" selected>1.25 – Normalboden</option>
+              <option value="1.40">1.40 – Schwerer Boden / Fels</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div id="excavationResult"></div>
+      <div id="excavationCanvas" style="margin-top:1.5rem"></div>
+    </div>
+
+    <!-- PAGE: AUSNÜTZUNG -->
+    <div class="page" id="page-utilization">
+      <div class="header">
+        <h1>Maximale Ausnützung</h1>
+        <p>Bebauungsvorschlag basierend auf Zonenvorschriften TG · SG · AI · AR</p>
+      </div>
+      <div class="card">
+        <div class="card-title">🗺️ Parzellendaten &amp; Zone</div>
+        <div class="form-grid">
+          <div class="fg"><label>Parzellenfläche (m²)</label>
+            <input type="number" id="utArea" placeholder="z.B. 1200" oninput="calcUtilization()"></div>
+          <div class="fg"><label>Bauzone</label>
+            <select id="utZone" onchange="calcUtilization()">
+              <option value="W2">W2 – Wohnzone 2-geschossig</option>
+              <option value="W3">W3 – Wohnzone 3-geschossig</option>
+              <option value="W4">W4 – Wohnzone 4-geschossig</option>
+              <option value="WG3">WG3 – Wohn-/Gewerbe 3-gesch.</option>
+              <option value="WG4">WG4 – Wohn-/Gewerbe 4-gesch.</option>
+              <option value="K">K – Kernzone</option>
+            </select>
+          </div>
+          <div class="fg"><label>Grenzabstand (m)</label>
+            <input type="number" id="utSetback" value="3" step="0.5" oninput="calcUtilization()"></div>
+          <div class="fg"><label>Anzahl Gebäude</label>
+            <select id="utForm" onchange="calcUtilization()">
+              <option value="1">1 Gebäude</option>
+              <option value="2">2 Gebäude</option>
+              <option value="3">3 Gebäude</option>
+              <option value="4">4 Gebäude</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div id="utilizationResult"></div>
+    </div>
+
+    <!-- PAGE: EIGENE PREISE -->
+    <div class="page" id="page-prices">
+      <div class="header">
+        <h1>Eigene Preisdatenbank</h1>
+        <p>Überschreiben Sie CRB-Richtwerte mit eigenen Einheitspreisen</p>
+      </div>
+      <div class="card">
+        <div class="card-title">📥 CSV Import</div>
+        <div class="alert alert-info" style="margin-bottom:1rem;font-size:0.85rem">
+          Format: <code style="background:#e3f2fd;padding:0.2rem 0.4rem;border-radius:3px">Position;Bezeichnung;Einheit;Preis</code><br>
+          Beispiel: <code style="background:#e3f2fd;padding:0.2rem 0.4rem;border-radius:3px">231;Fenster Holz/Alu 2-fach;m²;920.00</code>
+        </div>
+        <div style="display:flex;gap:1rem;align-items:center;flex-wrap:wrap">
+          <input type="file" id="csvInput" accept=".csv" onchange="importCSV(this)"
+            style="flex:1;padding:0.5rem;border:1px solid var(--br);border-radius:6px">
+          <button class="btn-white" onclick="downloadSampleCSV()">⬇ Muster-CSV herunterladen</button>
+          <button class="btn-white" style="color:var(--red);border-color:var(--red)" onclick="resetPrices()">↺ Zurücksetzen</button>
+        </div>
+        <div id="csvResult" style="margin-top:1rem"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">✏️ Preise manuell anpassen <span class="badge" style="background:#fff8e1;color:#f57f17">Gelb = eigener Preis aktiv</span></div>
+        <div id="priceEditor"></div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+// ─── STATE ───────────────────────────────────────────────────────────────
+const S = {
+  region: 'TG', rf: 1.00,
+  buildings: [freshBuilding(1)],
+  cur: 1,
+  bkpItems: []
+};
+
+function freshBuilding(id) {
+  return { id, name:'Gebäude '+id, type:'timber', floors:2, height:2.8, len:12, wid:10,
+           living:0, kitchen:0, bath:0, parkett:0, tiles:0 };
+}
+
+// ─── PARCEL DB ───────────────────────────────────────────────────────────
+const PARCELS = {
+  Frauenfeld:[
+    {n:'1234',area:850,zone:'W2',az:0.35,slope:2,soil:2,h:10.5,cov:0.30},
+    {n:'5678',area:1200,zone:'W3',az:0.45,slope:5,soil:1,h:13.5,cov:0.35},
+    {n:'9012',area:650,zone:'W2',az:0.30,slope:0,soil:2,h:10.5,cov:0.28}
+  ],
+  Weinfelden:[
+    {n:'2345',area:720,zone:'W2',az:0.30,slope:0,soil:2,h:10.5,cov:0.28},
+    {n:'6789',area:980,zone:'WG3',az:0.40,slope:3,soil:1,h:13.5,cov:0.32}
+  ],
+  Amriswil:[
+    {n:'3456',area:890,zone:'W3',az:0.35,slope:1,soil:2,h:13.5,cov:0.30},
+    {n:'7890',area:1100,zone:'WG3',az:0.45,slope:4,soil:2,h:13.5,cov:0.35}
+  ],
+  StGallen:[
+    {n:'9876',area:950,zone:'WG3',az:0.50,slope:8,soil:3,h:16,cov:0.38},
+    {n:'5432',area:780,zone:'W2',az:0.35,slope:6,soil:3,h:10.5,cov:0.30},
+    {n:'1098',area:1300,zone:'WG4',az:0.55,slope:10,soil:3,h:16,cov:0.40}
+  ],
+  Gossau:[
+    {n:'4567',area:820,zone:'W2',az:0.30,slope:2,soil:2,h:10.5,cov:0.28},
+    {n:'8901',area:1050,zone:'W3',az:0.40,slope:4,soil:2,h:13.5,cov:0.33}
+  ],
+  Wil:[
+    {n:'2109',area:900,zone:'W3',az:0.35,slope:3,soil:2,h:13.5,cov:0.30},
+    {n:'6543',area:750,zone:'W2',az:0.30,slope:1,soil:2,h:10.5,cov:0.28}
+  ],
+  Appenzell:[
+    {n:'3210',area:1200,zone:'W2',az:0.25,slope:12,soil:3,h:10.5,cov:0.22},
+    {n:'7654',area:950,zone:'W2',az:0.30,slope:15,soil:3,h:10.5,cov:0.25}
+  ],
+  Herisau:[
+    {n:'4321',area:880,zone:'W2',az:0.30,slope:5,soil:2,h:10.5,cov:0.28},
+    {n:'8765',area:1100,zone:'W3',az:0.35,slope:8,soil:3,h:13.5,cov:0.30}
+  ]
+};
+
+// ─── BKP DATABASE (korrektes Format: dreistellig numerisch) ──────────────
+// BKP Nummern: 1-stellig Hauptgruppe, 2-stellig Untergruppe
+// Positionen werden als z.B. "211" dargestellt (BKP 2, Untergruppe 11)
+const BKP = [
+  // HAUPTGRUPPE 1 – VORBEREITUNGSARBEITEN
+  { grp:'1', grpName:'Vorbereitungsarbeiten', shared:true, sub:'11', subName:'Baustelleneinrichtung', pos:'111', name:'Baustellenzufahrt temporär', unit:'m', price:120, f:null },
+  { grp:'1', grpName:'Vorbereitungsarbeiten', shared:true, sub:'11', subName:'Baustelleneinrichtung', pos:'112', name:'Baustrom / Wasser Anschluss', unit:'psch', price:3500, f:'fixed:1' },
+  { grp:'1', grpName:'Vorbereitungsarbeiten', shared:true, sub:'11', subName:'Baustelleneinrichtung', pos:'113', name:'Baucontainer + WC', unit:'Mt', price:800, f:null },
+  { grp:'1', grpName:'Vorbereitungsarbeiten', shared:true, sub:'12', subName:'Aushub / Erdarbeiten', pos:'121', name:'Humusabtrag 20 cm', unit:'m³', price:25, f:'parcelArea*0.2' },
+  { grp:'1', grpName:'Vorbereitungsarbeiten', shared:true, sub:'12', subName:'Aushub / Erdarbeiten', pos:'122', name:'Baugrubenaushub Klasse 2', unit:'m³', price:45, f:'footprint*1.5' },
+  { grp:'1', grpName:'Vorbereitungsarbeiten', shared:true, sub:'12', subName:'Aushub / Erdarbeiten', pos:'123', name:'Abtransport Material Deponie', unit:'m³', price:35, f:'footprint*1.5' },
+  { grp:'1', grpName:'Vorbereitungsarbeiten', shared:true, sub:'12', subName:'Aushub / Erdarbeiten', pos:'124', name:'Planieren / Verdichten Baugrund', unit:'m²', price:20, f:'footprint' },
+  { grp:'1', grpName:'Vorbereitungsarbeiten', shared:true, sub:'13', subName:'Fundamente / Bodenplatte', pos:'131', name:'Sauberkeitsschicht Beton 5 cm', unit:'m³', price:280, f:'footprint*0.05' },
+  { grp:'1', grpName:'Vorbereitungsarbeiten', shared:true, sub:'13', subName:'Fundamente / Bodenplatte', pos:'132', name:'Fundament Beton C25/30', unit:'m³', price:420, f:'footprint*0.3' },
+  { grp:'1', grpName:'Vorbereitungsarbeiten', shared:true, sub:'13', subName:'Fundamente / Bodenplatte', pos:'133', name:'Bodenplatte 20 cm mit Dämmung', unit:'m²', price:380, f:'footprint' },
+  { grp:'1', grpName:'Vorbereitungsarbeiten', shared:true, sub:'13', subName:'Fundamente / Bodenplatte', pos:'134', name:'Bewehrung Fundament / Platte', unit:'kg', price:2.80, f:'footprint*30' },
+  { grp:'1', grpName:'Vorbereitungsarbeiten', shared:true, sub:'13', subName:'Fundamente / Bodenplatte', pos:'135', name:'Perimeterdämmung XPS 12 cm', unit:'m²', price:95, f:'perimeter*1.5' },
+
+  // HAUPTGRUPPE 2 – GEBÄUDE
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'21', subName:'Rohbau / Tragkonstruktion', pos:'211', name:'Außenwände Holzrahmenbau', unit:'m²', price:420, f:'wallArea' },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'21', subName:'Rohbau / Tragkonstruktion', pos:'212', name:'Außenwände Massivbau Beton', unit:'m²', price:480, f:null },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'21', subName:'Rohbau / Tragkonstruktion', pos:'213', name:'Innenwände tragend Holz', unit:'m²', price:280, f:null },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'21', subName:'Rohbau / Tragkonstruktion', pos:'214', name:'Geschossdecke Holz 24 cm', unit:'m²', price:380, f:'footprint*(floors-1)' },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'21', subName:'Rohbau / Tragkonstruktion', pos:'215', name:'Dachkonstruktion Holz', unit:'m²', price:320, f:'footprint*1.3' },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'22', subName:'Fassade / Dach', pos:'221', name:'Fassadendämmung 18 cm', unit:'m²', price:180, f:'wallArea' },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'22', subName:'Fassade / Dach', pos:'222', name:'Fassadenverkleidung Holz', unit:'m²', price:220, f:null },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'22', subName:'Fassade / Dach', pos:'223', name:'Außenputz mineralisch', unit:'m²', price:145, f:'wallArea' },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'22', subName:'Fassade / Dach', pos:'224', name:'Dacheindeckung Ziegel', unit:'m²', price:185, f:'footprint*1.3' },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'22', subName:'Fassade / Dach', pos:'225', name:'Dachdämmung 22 cm', unit:'m²', price:120, f:'footprint*1.3' },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'22', subName:'Fassade / Dach', pos:'226', name:'Dachrinnen / Fallrohre', unit:'lfm', price:85, f:'perimeter' },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'23', subName:'Fenster / Außentüren', pos:'231', name:'Fenster Holz/Alu 2-fach VSG', unit:'m²', price:850, f:'totalArea*0.15' },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'23', subName:'Fenster / Außentüren', pos:'232', name:'Fenster Holz/Alu 3-fach VSG', unit:'m²', price:1050, f:null },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'23', subName:'Fenster / Außentüren', pos:'233', name:'Haustüre Standard', unit:'Stk', price:3200, f:'fixed:1' },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'23', subName:'Fenster / Außentüren', pos:'234', name:'Balkontüre / Terrassentüre', unit:'Stk', price:2800, f:null },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'24', subName:'Innenwände / Trennwände', pos:'241', name:'Leichtbauwand doppelt beplankt', unit:'m²', price:125, f:null },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'24', subName:'Innenwände / Trennwände', pos:'242', name:'Massivwand Backstein 11.5 cm', unit:'m²', price:180, f:null },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'24', subName:'Innenwände / Trennwände', pos:'243', name:'Installationswand Bad', unit:'m²', price:220, f:'bath*2.5*2' },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'25', subName:'Innentüren', pos:'251', name:'Zimmertüre CPL weiß', unit:'Stk', price:580, f:'totalArea/20' },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'25', subName:'Innentüren', pos:'252', name:'Zimmertüre Holzdekor', unit:'Stk', price:780, f:null },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'25', subName:'Innentüren', pos:'253', name:'Schiebetüre System', unit:'Stk', price:1680, f:null },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'26', subName:'Bodenbeläge', pos:'261', name:'Parkett Eiche 2-Schicht 11 mm', unit:'m²', price:145, f:'parkett' },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'26', subName:'Bodenbeläge', pos:'262', name:'Fliesen Standard 60×60', unit:'m²', price:125, f:'tiles' },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'26', subName:'Bodenbeläge', pos:'263', name:'Unterlagsboden Estrich 6 cm', unit:'m²', price:85, f:'totalArea' },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'26', subName:'Bodenbeläge', pos:'264', name:'Fußbodenheizung Verlegung', unit:'m²', price:65, f:'totalArea*0.8' },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'27', subName:'Wandbeläge / Malerarbeiten', pos:'271', name:'Gipsputz Wände innen', unit:'m²', price:42, f:'totalArea*3' },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'27', subName:'Wandbeläge / Malerarbeiten', pos:'272', name:'Malerarbeiten 2× weiß', unit:'m²', price:28, f:'totalArea*3' },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'27', subName:'Wandbeläge / Malerarbeiten', pos:'273', name:'Wandfliesen Bad / Küche', unit:'m²', price:135, f:'(bath+kitchen)*2' },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'28', subName:'Sanitär', pos:'281', name:'WC komplett Standard', unit:'Stk', price:850, f:'bath/6' },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'28', subName:'Sanitär', pos:'282', name:'Waschtisch + Unterschrank 90 cm', unit:'Stk', price:1200, f:'bath/6' },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'28', subName:'Sanitär', pos:'283', name:'Dusche bodengleich mit Glaswand', unit:'Stk', price:3200, f:'bath/8' },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'28', subName:'Sanitär', pos:'284', name:'Sanitärleitungen pro Nasszelle', unit:'psch', price:4500, f:'bath/6' },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'29', subName:'Küche', pos:'291', name:'Küchenzeile Standard 3 m', unit:'lfm', price:2800, f:'kitchen/3' },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'29', subName:'Küche', pos:'292', name:'Elektrogeräte Paket Standard', unit:'psch', price:3500, f:'kitchen/8' },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'29', subName:'Küche', pos:'293', name:'Spüle Edelstahl mit Armatur', unit:'Stk', price:650, f:'kitchen/8' },
+
+  // HAUPTGRUPPE 3 – BETRIEBSEINRICHTUNGEN
+  { grp:'3', grpName:'Betriebseinrichtungen', shared:false, sub:'31', subName:'Heizung / Lüftung', pos:'311', name:'Wärmepumpe Luft/Wasser 8 kW', unit:'Stk', price:18500, f:'totalArea<150?1:0' },
+  { grp:'3', grpName:'Betriebseinrichtungen', shared:false, sub:'31', subName:'Heizung / Lüftung', pos:'312', name:'Wärmepumpe Sole/Wasser 10 kW', unit:'Stk', price:25000, f:null },
+  { grp:'3', grpName:'Betriebseinrichtungen', shared:false, sub:'31', subName:'Heizung / Lüftung', pos:'313', name:'Fußbodenheizung Verteiler', unit:'psch', price:4500, f:'fixed:1' },
+  { grp:'3', grpName:'Betriebseinrichtungen', shared:false, sub:'31', subName:'Heizung / Lüftung', pos:'314', name:'Lüftungsanlage mit WRG', unit:'psch', price:15000, f:'totalArea>100?1:0' },
+  { grp:'3', grpName:'Betriebseinrichtungen', shared:false, sub:'32', subName:'Elektroinstallationen', pos:'321', name:'Hausanschluss + Hauptverteilung', unit:'psch', price:5500, f:'fixed:1' },
+  { grp:'3', grpName:'Betriebseinrichtungen', shared:false, sub:'32', subName:'Elektroinstallationen', pos:'322', name:'Elektroinstallation Standard', unit:'m²', price:85, f:'totalArea' },
+  { grp:'3', grpName:'Betriebseinrichtungen', shared:false, sub:'32', subName:'Elektroinstallationen', pos:'323', name:'Beleuchtung LED Basis', unit:'Stk', price:120, f:'totalArea/15' },
+  { grp:'3', grpName:'Betriebseinrichtungen', shared:false, sub:'32', subName:'Elektroinstallationen', pos:'324', name:'Photovoltaik 10 kWp', unit:'kWp', price:1650, f:null },
+
+  // HAUPTGRUPPE 4 – UMGEBUNG
+  { grp:'4', grpName:'Umgebung', shared:true, sub:'41', subName:'Umgebungsarbeiten', pos:'411', name:'Gartenanlage / Humusierung', unit:'m²', price:35, f:'parcelArea-footprint' },
+  { grp:'4', grpName:'Umgebung', shared:true, sub:'41', subName:'Umgebungsarbeiten', pos:'412', name:'Rasensaat mit Ansaat', unit:'m²', price:18, f:'parcelArea-footprint' },
+  { grp:'4', grpName:'Umgebung', shared:true, sub:'41', subName:'Umgebungsarbeiten', pos:'413', name:'Terrasse Betonplatten 50×50', unit:'m²', price:180, f:'footprint*0.15' },
+  { grp:'4', grpName:'Umgebung', shared:true, sub:'41', subName:'Umgebungsarbeiten', pos:'414', name:'Zufahrt / Parkplatz Asphalt', unit:'m²', price:145, f:'fixed:30' },
+  { grp:'4', grpName:'Umgebung', shared:true, sub:'41', subName:'Umgebungsarbeiten', pos:'415', name:'Einfriedung Zaun Holz 180 cm', unit:'lfm', price:185, f:null }
+];
+
+// ─── FORMULA ENGINE ───────────────────────────────────────────────────────
+function evalF(f, ctx) {
+  if (!f) return 0;
+  if (f.startsWith('fixed:')) return +f.split(':')[1] || 0;
+  if (f.includes('?')) {
+    const m = f.match(/^(.+?)\?(.+?):(.+)$/);
+    if (!m) return 0;
+    return evalCond(m[1],ctx) ? evalF(m[2],ctx) : evalF(m[3],ctx);
+  }
+  let e = f;
+  Object.entries(ctx).forEach(([k,v]) => { e = e.replace(new RegExp('\\b'+k+'\\b','g'), +v||0); });
+  try { return Function('"use strict";return('+e+')')(); } catch { return 0; }
+}
+function evalCond(c, ctx) {
+  if (c.includes('<')) { const [a,b]=c.split('<'); return evalF(a,ctx)<+b; }
+  if (c.includes('>')) { const [a,b]=c.split('>'); return evalF(a,ctx)>+b; }
+  return false;
+}
+function buildCtx(b) {
+  const fp = b.len * b.wid;
+  const ta = fp * b.floors;
+  return {
+    footprint: fp, totalArea: ta, floors: b.floors,
+    perimeter: 2*(b.len+b.wid),
+    wallArea: 2*(b.len+b.wid)*b.height*b.floors,
+    roofArea: fp*1.3,
+    parcelArea: +document.getElementById('parcelArea').value||0,
+    bath: b.bath||0, kitchen: b.kitchen||0,
+    parkett: b.parkett||0, tiles: b.tiles||0
+  };
+}
+
+// ─── NAVIGATION ───────────────────────────────────────────────────────────
+function goTo(page) {
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.getElementById('page-'+page).classList.add('active');
+  document.getElementById('nav-'+page).classList.add('active');
+  if (page==='surfaces') renderSurfaces();
+  if (page==='bkp') buildBKP();
+  if (page==='summary') buildSummary();
+}
+
+// ─── REGION ───────────────────────────────────────────────────────────────
+function selRegion(el, r, f) {
+  S.region=r; S.rf=f;
+  document.querySelectorAll('.rcard').forEach(c=>c.classList.remove('sel'));
+  el.classList.add('sel');
+}
+
+// ─── COMPLETE PLZ DATABASE TG/SG/AI/AR ──────────────────────────────────
+const PLZ_DB = [
+  // THURGAU (TG)
+  [8265,"Mammern","TG"],[8267,"Berlingen","TG"],[8268,"Salenstein","TG"],
+  [8269,"Fruthwilen","TG"],[8272,"Ermatingen","TG"],[8273,"Triboltingen","TG"],
+  [8274,"Gottlieben","TG"],[8280,"Kreuzlingen","TG"],[8282,"Kreuzlingen","TG"],
+  [8355,"Aadorf","TG"],[8356,"Ettenhausen TG","TG"],[8357,"Guntershausen b. Aadorf","TG"],
+  [8360,"Eschlikon TG","TG"],[8362,"Balterswil","TG"],[8363,"Bichelsee","TG"],
+  [8370,"Sirnach","TG"],[8374,"Dussnang","TG"],[8376,"Fischingen","TG"],
+  [8450,"Andelfingen","TG"],[8451,"Kleinandelfingen","TG"],[8464,"Ellikon am Rhein","TG"],
+  [8466,"Trüllikon","TG"],[8467,"Truttikon","TG"],
+  [8500,"Frauenfeld","TG"],[8501,"Frauenfeld","TG"],[8505,"Pfyn","TG"],
+  [8506,"Lanzenneunforn","TG"],[8507,"Hörhausen","TG"],[8508,"Homburg","TG"],
+  [8512,"Thundorf","TG"],[8514,"Amlikon-Bissegg","TG"],[8522,"Häuslenen","TG"],
+  [8524,"Uesslingen-Buch","TG"],[8525,"Niederneunforn","TG"],[8526,"Oberneunforn","TG"],
+  [8532,"Warth-Weiningen","TG"],[8535,"Herdern","TG"],[8536,"Hüttwilen","TG"],
+  [8537,"Nussbaumen TG","TG"],[8538,"Lengwil","TG"],[8540,"Kefikon TG","TG"],
+  [8546,"Islikon","TG"],[8547,"Engwilen","TG"],[8548,"Ellikon an der Thur","TG"],
+  [8552,"Felben-Wellhausen","TG"],[8553,"Harenwilen","TG"],[8554,"Müllheim Dorf","TG"],
+  [8556,"Wigoltingen","TG"],[8558,"Raperswilen","TG"],[8560,"Märstetten","TG"],
+  [8561,"Ottoberg","TG"],[8564,"Wagerswil","TG"],[8565,"Hugelshofen","TG"],
+  [8570,"Weinfelden","TG"],[8572,"Berg TG","TG"],[8574,"Lengwil","TG"],
+  [8575,"Bürglen TG","TG"],[8576,"Mauren TG","TG"],[8577,"Burkartshausen","TG"],
+  [8580,"Amriswil","TG"],[8581,"Schocherswil","TG"],[8582,"Dozwil","TG"],
+  [8583,"Götighofen","TG"],[8584,"Leimbach TG","TG"],[8585,"Langrickenbach","TG"],
+  [8586,"Andwil TG","TG"],[8587,"Oberaach","TG"],[8588,"Zihlschlacht","TG"],
+  [8590,"Romanshorn","TG"],[8592,"Uttwil","TG"],[8593,"Kesswil","TG"],
+  [8594,"Güttingen","TG"],[8595,"Altnau","TG"],[8596,"Münsterlingen","TG"],
+  [8597,"Landschlacht","TG"],[8598,"Bottighofen","TG"],[8599,"Salmsach","TG"],
+  [9220,"Bischofszell","TG"],[9223,"Schweizersholz","TG"],[9225,"Wilen b. Bischofszell","TG"],
+  [9226,"Niederwil TG","TG"],[9507,"Stettfurt","TG"],[9514,"Wuppenau","TG"],
+  [9515,"Hosenruck","TG"],[9535,"Wängi","TG"],[9542,"Münchwilen TG","TG"],
+  [9543,"St. Margarethen TG","TG"],[9545,"Wängi","TG"],[9546,"Tuttwil","TG"],
+  [9547,"Wittenwil","TG"],[9548,"Matzingen","TG"],[9549,"Tägerschen","TG"],
+  [9556,"Affeltrangen","TG"],[9562,"Märwil","TG"],[9573,"Littenheid","TG"],
+
+  // ST. GALLEN (SG)
+  [9000,"St. Gallen","SG"],[9004,"St. Gallen","SG"],[9006,"St. Gallen","SG"],
+  [9007,"St. Gallen","SG"],[9008,"St. Gallen","SG"],[9010,"St. Gallen","SG"],
+  [9011,"St. Gallen","SG"],[9012,"St. Gallen","SG"],[9013,"St. Gallen","SG"],
+  [9014,"St. Gallen","SG"],[9015,"St. Gallen","SG"],[9016,"St. Gallen","SG"],
+  [9020,"Abtwil SG","SG"],[9030,"Abtwil SG","SG"],[9032,"Engelburg","SG"],
+  [9033,"Untereggen","SG"],[9034,"Eggersriet","SG"],[9036,"Grub SG","SG"],
+  [9113,"Degersheim","SG"],[9114,"Hoffeld","SG"],[9116,"Wolfertswil","SG"],
+  [9122,"Mogelsberg","SG"],[9123,"Nassen","SG"],[9125,"Brunnadern","SG"],
+  [9127,"St. Peterzell","SG"],[9200,"Gossau SG","SG"],[9201,"Gossau SG","SG"],
+  [9203,"Niederwil SG","SG"],[9204,"Andwil SG","SG"],[9205,"Waldkirch","SG"],
+  [9212,"Arnegg","SG"],[9213,"Hauptwil","SG"],[9214,"Kradolf","SG"],
+  [9215,"Schönenberg an der Thur","SG"],[9230,"Flawil","SG"],[9231,"Egg (Flawil)","SG"],
+  [9240,"Uzwil","SG"],[9242,"Oberuzwil","SG"],[9243,"Jonschwil","SG"],
+  [9244,"Niederuzwil","SG"],[9245,"Oberbüren","SG"],[9246,"Niederbüren","SG"],
+  [9247,"Henau","SG"],[9300,"Wittenbach","SG"],[9302,"Kronbühl","SG"],
+  [9304,"Bernhardzell","SG"],[9305,"Berg SG","SG"],[9308,"Lömmenschwil","SG"],
+  [9312,"Häggenschwil","SG"],[9313,"Muolen","SG"],[9314,"Steinebrunn","SG"],
+  [9315,"Neukirch (Egnach)","SG"],[9320,"Arbon","SG"],[9322,"Egnach","SG"],
+  [9323,"Steinach","SG"],[9326,"Horn","SG"],[9327,"Tübach","SG"],
+  [9400,"Rorschach","SG"],[9402,"Mörschwil","SG"],[9403,"Goldach","SG"],
+  [9404,"Rorschacherberg","SG"],[9405,"Wienacht-Tobel","SG"],
+  [9422,"Staad SG","SG"],[9423,"Altenrhein","SG"],[9424,"Rheineck","SG"],
+  [9425,"Thal","SG"],[9430,"St. Margrethen SG","SG"],[9434,"Au SG","SG"],
+  [9435,"Heerbrugg","SG"],[9436,"Balgach","SG"],[9437,"Marbach SG","SG"],
+  [9442,"Berneck","SG"],[9443,"Widnau","SG"],[9444,"Diepoldsau","SG"],
+  [9445,"Rebstein","SG"],[9450,"Altstätten SG","SG"],[9451,"Kriessern","SG"],
+  [9462,"Montlingen","SG"],[9463,"Oberriet SG","SG"],[9464,"Rüthi SG","SG"],
+  [9465,"Salez","SG"],[9466,"Sennwald","SG"],[9467,"Frümsen","SG"],
+  [9468,"Sax","SG"],[9470,"Buchs SG","SG"],[9472,"Grabs","SG"],
+  [9473,"Gams","SG"],[9475,"Sevelen","SG"],[9477,"Trübbach","SG"],
+  [9478,"Azmoos","SG"],[9479,"Oberschan","SG"],[9500,"Wil SG","SG"],
+  [9502,"Braunau","SG"],[9506,"Lütisburg Station","SG"],[9512,"Rossrüti","SG"],
+  [9523,"Züberwangen","SG"],[9524,"Zuzwil SG","SG"],[9525,"Lenggenwil","SG"],
+  [9526,"Zuckenriet","SG"],[9527,"Niederhelfenschwil","SG"],[9532,"Rickenbach b. Wil","SG"],
+  [9533,"Kirchberg SG","SG"],[9534,"Gähwil","SG"],[9540,"Wil SG","SG"],
+  [9552,"Bronschhofen","SG"],[9554,"St. Peterzell","SG"],[9555,"Tobel-Tägerschen","SG"],
+  [9601,"Lütisburg","SG"],[9602,"Bazenheid","SG"],[9607,"Mosnang","SG"],
+  [9608,"Ganterschwil","SG"],[9612,"Dreien","SG"],[9613,"Mühlrüti","SG"],
+  [9614,"Libingen","SG"],[9615,"Dietfurt","SG"],[9620,"Lichtensteig","SG"],
+  [9621,"Oberhelfenschwil","SG"],[9630,"Wattwil","SG"],[9633,"Hemberg","SG"],
+  [9642,"Ebnat-Kappel","SG"],[9643,"Krummenau","SG"],[9650,"Nesslau","SG"],
+  [9651,"Ennetbühl","SG"],[9652,"Neu St. Johann","SG"],[9655,"Stein SG","SG"],
+  [9656,"Alt St. Johann","SG"],[9657,"Unterwasser","SG"],[9658,"Wildhaus","SG"],
+
+  // APPENZELL INNERRHODEN (AI)
+  [9050,"Appenzell","AI"],[9054,"Gais","AI"],[9055,"Bühler","AI"],
+  [9057,"Weissbad","AI"],[9058,"Brülisau","AI"],[9108,"Gonten","AI"],
+  [9413,"Oberegg","AI"],
+
+  // APPENZELL AUSSERRHODEN (AR)
+  [9035,"Grub AR","AR"],[9037,"Speicher","AR"],[9038,"Rehetobel","AR"],
+  [9042,"Speicher","AR"],[9043,"Trogen","AR"],[9044,"Wald AR","AR"],
+  [9053,"Teufen AR","AR"],[9056,"Gais","AR"],[9062,"Lustmühle","AR"],
+  [9063,"Stein AR","AR"],[9064,"Hundwil","AR"],[9100,"Herisau","AR"],
+  [9102,"Herisau","AR"],[9103,"Schwellbrunn","AR"],[9104,"Waldstatt","AR"],
+  [9105,"Schönengrund","AR"],[9106,"Urnäsch","AR"],[9112,"Schachen b. Herisau","AR"],
+  [9410,"Heiden","AR"],[9411,"Reute AR","AR"],[9414,"Schachen b. Reute","AR"],
+  [9426,"Lutzenberg","AR"],[9427,"Wolfhalden","AR"],[9428,"Walzenhausen","AR"]
+];
+
+// Current selected PLZ entry
+let selectedPLZ = null;
+
+function onPLZInput(val) {
+  const out = document.getElementById('plzResult');
+  const matches = document.getElementById('plzMatches');
+  selectedPLZ = null;
+
+  if (val.length < 2) {
+    out.innerHTML = '<span style="color:var(--gt)">wird automatisch gefüllt</span>';
+    matches.innerHTML = '';
+    return;
+  }
+
+  const hits = PLZ_DB.filter(r => String(r[0]).startsWith(val));
+
+  if (val.length === 4) {
+    const exact = PLZ_DB.filter(r => String(r[0]) === val);
+    if (exact.length === 1) {
+      // Single match – auto-fill
+      selectedPLZ = exact[0];
+      out.innerHTML = `<strong>${exact[0][1]}</strong> <span class="badge badge-${exact[0][2]==='AI'?'red':exact[0][2]==='AR'?'blue':'green'}">${exact[0][2]}</span>`;
+      matches.innerHTML = '';
+      // Auto-set region
+      const r = exact[0][2];
+      const rf = {TG:1.00,SG:1.05,AI:1.08,AR:1.03}[r]||1.00;
+      document.querySelectorAll('.rcard').forEach(c=>c.classList.remove('sel'));
+      const rc = document.querySelector(`.rcard[data-r="${r}"]`);
+      if (rc) { rc.classList.add('sel'); S.region=r; S.rf=rf; }
+      return;
+    } else if (exact.length > 1) {
+      // Multiple with same PLZ – show picker
+      out.innerHTML = `<span style="color:var(--gt)">${exact.length} Orte – bitte wählen</span>`;
+      matches.innerHTML = exact.map(e =>
+        `<button class="btn-white" onclick="selectPLZEntry(${e[0]},'${e[1]}','${e[2]}')" style="margin:0.25rem 0.25rem 0 0;font-size:0.82rem">
+          ${e[0]} ${e[1]} <span class="badge badge-green">${e[2]}</span>
+        </button>`
+      ).join('');
+      return;
+    }
+  }
+
+  if (hits.length === 0) {
+    out.innerHTML = '<span style="color:var(--red)">Keine PLZ gefunden in TG/SG/AI/AR</span>';
+    matches.innerHTML = '';
+  } else if (hits.length <= 6) {
+    out.innerHTML = '<span style="color:var(--gt)">Bitte wählen:</span>';
+    matches.innerHTML = hits.map(e =>
+      `<button class="btn-white" onclick="selectPLZEntry(${e[0]},'${e[1]}','${e[2]}')" style="margin:0.25rem 0.25rem 0 0;font-size:0.82rem">
+        ${e[0]} ${e[1]} <span class="badge badge-green">${e[2]}</span>
+      </button>`
+    ).join('');
+  } else {
+    out.innerHTML = `<span style="color:var(--gt)">${hits.length} Treffer – weiter eingeben</span>`;
+    matches.innerHTML = '';
+  }
+}
+
+function selectPLZEntry(plz, name, kt) {
+  selectedPLZ = [plz, name, kt];
+  document.getElementById('pPLZ').value = plz;
+  document.getElementById('plzResult').innerHTML =
+    `<strong>${name}</strong> <span class="badge badge-${kt==='AI'?'red':kt==='AR'?'blue':'green'}">${kt}</span>`;
+  document.getElementById('plzMatches').innerHTML = '';
+  // Auto-set region
+  const rf = {TG:1.00,SG:1.05,AI:1.08,AR:1.03}[kt]||1.00;
+  document.querySelectorAll('.rcard').forEach(c=>c.classList.remove('sel'));
+  const rc = document.querySelector(`.rcard[data-r="${kt}"]`);
+  if (rc) { rc.classList.add('sel'); S.region=kt; S.rf=rf; }
+}
+
+// ─── PARCEL LOOKUP ────────────────────────────────────────────────────────
+async function lookupParcel() {
+  const num = document.getElementById('pNum').value.trim();
+  const out = document.getElementById('lookupResult');
+
+  if (!selectedPLZ) {
+    out.innerHTML = '<div class="alert alert-info" style="margin-top:1rem">⚠️ Bitte zuerst eine Postleitzahl eingeben und Gemeinde wählen.</div>';
+    return;
+  }
+  if (!num) {
+    out.innerHTML = '<div class="alert alert-info" style="margin-top:1rem">⚠️ Bitte Parzellennummer eingeben.</div>';
+    return;
+  }
+
+  const munKey = selectedPLZ[1].replace(/\s.*/,''); // Use first word as key for PARCELS lookup
+  loading(`Parzelle ${num} in ${selectedPLZ[1]} (${selectedPLZ[2]}) wird gesucht…`);
+  await delay(1200);
+  unload();
+
+  // Try exact municipality match, then fuzzy
+  let p = null;
+  for (const [key, list] of Object.entries(PARCELS)) {
+    if (selectedPLZ[1].toLowerCase().includes(key.toLowerCase()) ||
+        key.toLowerCase().includes(selectedPLZ[1].toLowerCase().split(' ')[0].toLowerCase())) {
+      p = list.find(x => x.n === num);
+      if (p) break;
+    }
+  }
+
+  if (!p) {
+    // Show available parcels for this PLZ area
+    const suggestions = [];
+    for (const [key, list] of Object.entries(PARCELS)) {
+      if (selectedPLZ[2] === 'TG' && ['Frauenfeld','Weinfelden','Amriswil'].includes(key)) suggestions.push(...list.map(x=>key+': '+x.n));
+      if (selectedPLZ[2] === 'SG' && ['StGallen','Gossau','Wil'].includes(key)) suggestions.push(...list.map(x=>key+': '+x.n));
+      if (selectedPLZ[2] === 'AI' && key==='Appenzell') suggestions.push(...list.map(x=>key+': '+x.n));
+      if (selectedPLZ[2] === 'AR' && key==='Herisau') suggestions.push(...list.map(x=>key+': '+x.n));
+    }
+    out.innerHTML = `
+      <div class="alert alert-info" style="margin-top:1rem">
+        ⚠️ Parzelle <strong>${num}</strong> in <strong>${selectedPLZ[1]}</strong> nicht in Mock-DB.<br>
+        <span style="font-size:0.82rem">In Kanton ${selectedPLZ[2]} verfügbare Testparzellen: ${suggestions.slice(0,8).join(' · ')}</span><br>
+        <span style="font-size:0.82rem;color:var(--gt)">Phase 3: Echte API-Anbindung kantonaler Geoportale</span>
+      </div>`;
+    return;
+  }
+
+  const maxFP = Math.round(p.area * p.cov);
+  const maxGFA = Math.round(p.area * p.az);
+  const recFloors = Math.min(Math.ceil(maxGFA / maxFP), Math.floor(p.h / 2.8));
+  const dim = Math.round(Math.sqrt(maxFP / recFloors));
+
+  out.innerHTML = `
+    <div class="result-card">
+      <strong>✅ Parzelle ${p.n} – ${selectedPLZ[0]} ${selectedPLZ[1]} (${selectedPLZ[2]})</strong>
+      <div class="result-grid">
+        <div class="result-item"><div class="result-item-label">Fläche</div><div class="result-item-value">${p.area} m²</div></div>
+        <div class="result-item"><div class="result-item-label">Zone</div><div class="result-item-value">${p.zone}</div></div>
+        <div class="result-item"><div class="result-item-label">Ausnützung</div><div class="result-item-value">${p.az}</div></div>
+        <div class="result-item"><div class="result-item-label">Max. GFA</div><div class="result-item-value">${maxGFA} m²</div></div>
+        <div class="result-item"><div class="result-item-label">Max. Überbauung</div><div class="result-item-value">${maxFP} m²</div></div>
+        <div class="result-item"><div class="result-item-label">Hangneigung</div><div class="result-item-value">${p.slope}%</div></div>
+      </div>
+      <div style="margin-top:0.75rem;font-size:0.85rem;opacity:0.9">
+        💡 Empfehlung: ${recFloors} Geschosse · ca. ${dim}m × ${dim}m Grundriss
+      </div>
+      <button class="btn-green" style="margin-top:1rem;width:100%" onclick='applyParcel(${JSON.stringify(p)},${recFloors},${dim})'>
+        Daten übernehmen →
+      </button>
+    </div>`;
+}
+
+function applyParcel(p, floors, dim) {
+  document.getElementById('parcelArea').value = p.area;
+  document.getElementById('soilClass').value = p.soil;
+  // Apply to first building
+  const b = S.buildings[0];
+  b.floors = floors; b.len = dim; b.wid = dim;
+  autoCalcBuilding(b);
+  alert(`✅ Übernommen!\n\nParzelle: ${p.area} m² · Zone: ${p.zone}\nGebäude 1: ${floors} Geschosse · ${dim}m × ${dim}m`);
+}
+
+// ─── FILE UPLOAD ──────────────────────────────────────────────────────────
+// ─── UPLOADED FILES STATE ────────────────────────────────────────────────
+let uploadedFiles = []; // {file, name, type, base64, status}
+
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('uploadZoneMain').style.borderColor = 'var(--br)';
+  const files = Array.from(e.dataTransfer.files);
+  files.forEach(addFile);
+}
+
+document.getElementById('fileIn').addEventListener('change', (e) => {
+  Array.from(e.target.files).forEach(addFile);
+  e.target.value = ''; // allow re-selecting same file
+});
+
+function addFile(file) {
+  const existing = uploadedFiles.find(f => f.name === file.name);
+  if (existing) return;
+  uploadedFiles.push({ file, name: file.name, type: file.type, base64: null, status: 'pending' });
+  renderFileList();
+}
+
+function removeFile(name) {
+  uploadedFiles = uploadedFiles.filter(f => f.name !== name);
+  renderFileList();
+}
+
+function renderFileList() {
+  const list = document.getElementById('fileList');
+  const items = document.getElementById('fileItems');
+  if (uploadedFiles.length === 0) { list.style.display = 'none'; return; }
+  list.style.display = 'block';
+  items.innerHTML = uploadedFiles.map(f => `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:0.6rem 0.75rem;background:var(--bg);border-radius:6px;margin-bottom:0.4rem;font-size:0.875rem">
+      <span>
+        ${f.type.includes('pdf') ? '📄' : '🖼️'} <strong>${f.name}</strong>
+        ${f.status==='done' ? '<span class="badge badge-green" style="margin-left:0.5rem">analysiert</span>' :
+          f.status==='error' ? '<span class="badge badge-red" style="margin-left:0.5rem">Fehler</span>' :
+          '<span class="badge" style="margin-left:0.5rem;background:#9e9e9e;color:white">ausstehend</span>'}
+      </span>
+      <button onclick="removeFile('${f.name}')" style="background:none;border:none;color:var(--gt);cursor:pointer;font-size:1.1rem;padding:0">✕</button>
+    </div>`).join('');
+}
+
+// Convert file to base64
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+// ─── MAIN ANALYSIS FUNCTION ───────────────────────────────────────────────
+async function analyzeAllPlans() {
+  if (uploadedFiles.length === 0) return;
+
+  const out = document.getElementById('aiResult');
+  out.innerHTML = '';
+
+  // Process files one by one
+  for (let i = 0; i < uploadedFiles.length; i++) {
+    const f = uploadedFiles[i];
+    loading(`Plan ${i+1}/${uploadedFiles.length} wird analysiert: ${f.name} …`);
+
+    try {
+      f.base64 = await fileToBase64(f.file);
+      const result = await analyzeWithClaude(f);
+      f.status = 'done';
+      f.result = result;
+    } catch (err) {
+      f.status = 'error';
+      f.error = err.message;
+      console.error('Analysis error:', err);
+    }
+
+    renderFileList();
+  }
+
+  unload();
+
+  // Merge all results
+  const allResults = uploadedFiles.filter(f => f.result).map(f => f.result);
+  if (allResults.length > 0) {
+    const merged = mergeAnalysisResults(allResults);
+    renderAnalysisResults(merged, uploadedFiles.filter(f=>f.result).map(f=>f.name));
+  } else {
+    out.innerHTML = '<div class="alert" style="background:#ffebee;border-left:4px solid var(--red);color:var(--red);margin-top:1rem">Analyse fehlgeschlagen. Bitte überprüfen Sie die Pläne.</div>';
+  }
+}
+
+// ─── CLAUDE API CALL ──────────────────────────────────────────────────────
+async function analyzeWithClaude(f) {
+  const isImage = f.type.includes('image') || f.type.includes('png') || f.type.includes('jpg') || f.type.includes('jpeg');
+  const isPDF = f.type.includes('pdf');
+
+  const mediaType = isPDF ? 'application/pdf' : f.type;
+
+  const systemPrompt = `Du bist ein Schweizer Bauingenieur und Architekt. Du analysierst Baupläne (Grundrisse, Schnitte, Fassaden) und extrahierst alle relevanten Daten.
+
+Antworte AUSSCHLIESSLICH mit einem JSON-Objekt. Kein Text davor oder danach. Kein Markdown.
+
+JSON-Schema:
+{
+  "planTyp": "grundriss|schnitt|fassade|lageplan|unbekannt",
+  "geschoss": "EG|OG1|OG2|UG|Dach|alle",
+  "gebaeude": {
+    "laenge": Zahl_in_m_oder_null,
+    "breite": Zahl_in_m_oder_null,
+    "hoehe_gesamt": Zahl_in_m_oder_null,
+    "anzahl_geschosse": Zahl_oder_null
+  },
+  "raeume": [
+    {
+      "name": "Wohnzimmer",
+      "flaeche_m2": Zahl_oder_null,
+      "breite_m": Zahl_oder_null,
+      "laenge_m": Zahl_oder_null,
+      "raumhoehe_m": Zahl_oder_null,
+      "typ": "wohnen|schlafen|kueche|bad|wc|erschliessung|nebenraum|keller|garage"
+    }
+  ],
+  "fenster": [
+    {
+      "raum": "Wohnzimmer",
+      "anzahl": Zahl,
+      "breite_m": Zahl_oder_null,
+      "hoehe_m": Zahl_oder_null,
+      "typ": "standard|bodentief|dachfenster"
+    }
+  ],
+  "tueren": {
+    "innen": Zahl_oder_null,
+    "aussen": Zahl_oder_null,
+    "balkon_terrasse": Zahl_oder_null
+  },
+  "masse": {
+    "nettowohnflaeche_m2": Zahl_oder_null,
+    "bruttogrundrissflaeche_m2": Zahl_oder_null,
+    "fassadenflaeche_m2": Zahl_oder_null
+  },
+  "massstab": "erkannt z.B. 1:100 oder null",
+  "bemerkungen": "Besonderheiten, Unsicherheiten, fehlende Massangaben etc."
+}
+
+WICHTIG: 
+- Wenn Masse im Plan sichtbar sind, lies diese GENAU ab
+- Fehlende Werte = null (nicht 0 oder schätzen)
+- Raumflächen aus Beschriftung ODER aus Masse berechnen wenn möglich
+- Bei Schnitten: Raumhöhen und Geschosshöhen besonders beachten
+- Bei Fassaden: Fensteranzahl und Fenstergrössen erfassen`;
+
+  const userContent = [
+    {
+      type: isPDF ? "document" : "image",
+      source: {
+        type: "base64",
+        media_type: mediaType,
+        data: f.base64
+      }
+    },
+    {
+      type: "text",
+      text: `Analysiere diesen Bauplan (${f.name}) und extrahiere alle Daten. Antworte nur mit dem JSON-Objekt.`
+    }
+  ];
+
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 2000,
+      system: systemPrompt,
+      messages: [{ role: "user", content: userContent }]
+    })
+  });
+
+  if (!response.ok) {
+    const err = await response.json();
+    throw new Error(err.error?.message || 'API Fehler ' + response.status);
+  }
+
+  const data = await response.json();
+  const text = data.content[0]?.text || '';
+
+  // Clean JSON
+  const clean = text.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim();
+  return JSON.parse(clean);
+}
+
+// ─── MERGE MULTIPLE PLAN RESULTS ─────────────────────────────────────────
+function mergeAnalysisResults(results) {
+  const merged = {
+    raeume: [],
+    fenster: [],
+    tueren: { innen: 0, aussen: 0, balkon_terrasse: 0 },
+    masse: { nettowohnflaeche_m2: 0, bruttogrundrissflaeche_m2: 0, fassadenflaeche_m2: 0 },
+    gebaeude: { laenge: null, breite: null, hoehe_gesamt: null, anzahl_geschosse: null },
+    planTypes: []
+  };
+
+  results.forEach(r => {
+    merged.planTypes.push(r.planTyp || 'unbekannt');
+    merged.raeume.push(...(r.raeume || []));
+    merged.fenster.push(...(r.fenster || []));
+
+    if (r.tueren) {
+      merged.tueren.innen += r.tueren.innen || 0;
+      merged.tueren.aussen += r.tueren.aussen || 0;
+      merged.tueren.balkon_terrasse += r.tueren.balkon_terrasse || 0;
+    }
+    if (r.masse) {
+      if (r.masse.nettowohnflaeche_m2) merged.masse.nettowohnflaeche_m2 += r.masse.nettowohnflaeche_m2;
+      if (r.masse.fassadenflaeche_m2) merged.masse.fassadenflaeche_m2 = Math.max(merged.masse.fassadenflaeche_m2, r.masse.fassadenflaeche_m2);
+    }
+    if (r.gebaeude) {
+      if (r.gebaeude.laenge) merged.gebaeude.laenge = r.gebaeude.laenge;
+      if (r.gebaeude.breite) merged.gebaeude.breite = r.gebaeude.breite;
+      if (r.gebaeude.hoehe_gesamt) merged.gebaeude.hoehe_gesamt = r.gebaeude.hoehe_gesamt;
+      if (r.gebaeude.anzahl_geschosse) merged.gebaeude.anzahl_geschosse = r.gebaeude.anzahl_geschosse;
+    }
+  });
+
+  // Aggregate window areas
+  merged.fensterTotal = merged.fenster.reduce((sum, f) => {
+    const area = (f.breite_m || 1.2) * (f.hoehe_m || 1.2) * (f.anzahl || 1);
+    return sum + area;
+  }, 0);
+  merged.fensterAnzahl = merged.fenster.reduce((sum, f) => sum + (f.anzahl || 1), 0);
+
+  // Sum room areas by type
+  merged.flaechenByType = {};
+  merged.raeume.forEach(r => {
+    const typ = r.typ || 'sonstige';
+    merged.flaechenByType[typ] = (merged.flaechenByType[typ] || 0) + (r.flaeche_m2 || 0);
+  });
+
+  merged.gesamtflaeche = merged.raeume.reduce((s, r) => s + (r.flaeche_m2 || 0), 0);
+
+  return merged;
+}
+
+// ─── RENDER ANALYSIS RESULTS ─────────────────────────────────────────────
+function renderAnalysisResults(data, fileNames) {
+  const out = document.getElementById('aiResult');
+
+  const typeLabels = { wohnen:'Wohnbereiche', schlafen:'Schlafzimmer', kueche:'Küchen',
+    bad:'Nasszellen', wc:'WC', erschliessung:'Erschliessung', nebenraum:'Nebenräume',
+    keller:'Keller/UG', garage:'Garage', sonstige:'Sonstige' };
+
+  const flaechenRows = Object.entries(data.flaechenByType)
+    .filter(([,v]) => v > 0)
+    .map(([k,v]) => `<tr><td>${typeLabels[k]||k}</td><td style="text-align:right;font-weight:600">${v.toFixed(1)} m²</td></tr>`)
+    .join('');
+
+  const fensterRows = data.fenster.slice(0,10).map(f =>
+    `<tr>
+      <td>${f.raum||'–'}</td>
+      <td style="text-align:center">${f.anzahl||1}</td>
+      <td style="text-align:center">${f.breite_m ? f.breite_m+'m' : '–'}</td>
+      <td style="text-align:center">${f.hoehe_m ? f.hoehe_m+'m' : '–'}</td>
+      <td style="text-align:right;font-weight:600">${((f.breite_m||1.2)*(f.hoehe_m||1.2)*(f.anzahl||1)).toFixed(1)} m²</td>
+    </tr>`).join('');
+
+  out.innerHTML = `
+    <div style="margin-top:1.5rem">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+        <h3 style="font-size:1rem;font-weight:700">🤖 KI-Analyse abgeschlossen</h3>
+        <span style="font-size:0.8rem;color:var(--gt)">${fileNames.length} Plan${fileNames.length>1?'e':''} analysiert</span>
+      </div>
+
+      <!-- Key metrics -->
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0.75rem;margin-bottom:1.5rem">
+        ${metric('Gesamtfläche', data.gesamtflaeche.toFixed(1)+' m²', '#d32f2f')}
+        ${metric('Fenster', data.fensterAnzahl+' Stk', '#2196f3')}
+        ${metric('Fensterfläche', data.fensterTotal.toFixed(1)+' m²', '#ff9800')}
+        ${metric('Räume', data.raeume.length+' erkannt', '#4caf50')}
+      </div>
+
+      <!-- Gebäude -->
+      ${data.gebaeude.laenge||data.gebaeude.anzahl_geschosse ? `
+      <div class="card" style="margin-bottom:1rem;padding:1.25rem">
+        <div class="card-title" style="margin-bottom:0.75rem">🏗️ Gebäudedaten</div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;font-size:0.875rem">
+          ${data.gebaeude.laenge ? `<div><span style="color:var(--gt)">Länge</span><br><strong>${data.gebaeude.laenge} m</strong></div>` : ''}
+          ${data.gebaeude.breite ? `<div><span style="color:var(--gt)">Breite</span><br><strong>${data.gebaeude.breite} m</strong></div>` : ''}
+          ${data.gebaeude.hoehe_gesamt ? `<div><span style="color:var(--gt)">Gesamthöhe</span><br><strong>${data.gebaeude.hoehe_gesamt} m</strong></div>` : ''}
+          ${data.gebaeude.anzahl_geschosse ? `<div><span style="color:var(--gt)">Geschosse</span><br><strong>${data.gebaeude.anzahl_geschosse}</strong></div>` : ''}
+        </div>
+      </div>` : ''}
+
+      <!-- Raumflächen -->
+      ${flaechenRows ? `
+      <div class="card" style="margin-bottom:1rem;padding:1.25rem">
+        <div class="card-title" style="margin-bottom:0.75rem">📐 Raumflächen nach Typ</div>
+        <table style="width:100%;font-size:0.875rem;border-collapse:collapse">
+          <thead><tr style="border-bottom:2px solid var(--br)">
+            <th style="text-align:left;padding:0.4rem 0;font-size:0.75rem;color:var(--gt);text-transform:uppercase">Raumtyp</th>
+            <th style="text-align:right;padding:0.4rem 0;font-size:0.75rem;color:var(--gt);text-transform:uppercase">Fläche</th>
+          </tr></thead>
+          <tbody>${flaechenRows}</tbody>
+          <tfoot><tr style="border-top:2px solid var(--br);font-weight:700">
+            <td style="padding:0.5rem 0">Total erkannte Fläche</td>
+            <td style="text-align:right;color:var(--red)">${data.gesamtflaeche.toFixed(1)} m²</td>
+          </tfoot>
+        </table>
+      </div>` : ''}
+
+      <!-- Räume Detail -->
+      ${data.raeume.length > 0 ? `
+      <div class="card" style="margin-bottom:1rem;padding:1.25rem">
+        <div class="card-title" style="margin-bottom:0.75rem">🏠 Alle erkannten Räume</div>
+        <div style="max-height:250px;overflow-y:auto">
+        <table style="width:100%;font-size:0.82rem;border-collapse:collapse">
+          <thead style="position:sticky;top:0;background:white"><tr style="border-bottom:2px solid var(--br)">
+            <th style="text-align:left;padding:0.4rem 0.5rem;color:var(--gt)">Raum</th>
+            <th style="text-align:right;padding:0.4rem 0.5rem;color:var(--gt)">Fläche</th>
+            <th style="text-align:right;padding:0.4rem 0.5rem;color:var(--gt)">Raumhöhe</th>
+          </tr></thead>
+          <tbody>${data.raeume.map(r=>`
+            <tr style="border-bottom:1px solid var(--br)">
+              <td style="padding:0.4rem 0.5rem">${r.name||r.typ}</td>
+              <td style="text-align:right;padding:0.4rem 0.5rem;font-weight:600">${r.flaeche_m2 ? r.flaeche_m2.toFixed(1)+' m²' : '–'}</td>
+              <td style="text-align:right;padding:0.4rem 0.5rem;color:var(--gt)">${r.raumhoehe_m ? r.raumhoehe_m+' m' : '–'}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+        </div>
+      </div>` : ''}
+
+      <!-- Fenster -->
+      ${fensterRows ? `
+      <div class="card" style="margin-bottom:1rem;padding:1.25rem">
+        <div class="card-title" style="margin-bottom:0.75rem">🪟 Fenster (${data.fensterAnzahl} Stk · ${data.fensterTotal.toFixed(1)} m² gesamt)</div>
+        <table style="width:100%;font-size:0.82rem;border-collapse:collapse">
+          <thead><tr style="border-bottom:2px solid var(--br)">
+            <th style="text-align:left;padding:0.4rem 0.5rem;color:var(--gt)">Raum</th>
+            <th style="text-align:center;padding:0.4rem 0.5rem;color:var(--gt)">Anz.</th>
+            <th style="text-align:center;padding:0.4rem 0.5rem;color:var(--gt)">Breite</th>
+            <th style="text-align:center;padding:0.4rem 0.5rem;color:var(--gt)">Höhe</th>
+            <th style="text-align:right;padding:0.4rem 0.5rem;color:var(--gt)">Fläche</th>
+          </tr></thead>
+          <tbody>${fensterRows}</tbody>
+        </table>
+      </div>` : ''}
+
+      <!-- Apply button -->
+      <button class="btn-red" style="width:100%;padding:1rem;font-size:1rem" onclick='applyAI(${JSON.stringify(data).replace(/'/g,"&#39;")})'>
+        ✅ Alle Daten in Kalkulation übernehmen
+      </button>
+    </div>`;
+}
+
+function metric(label, value, color) {
+  return `<div style="background:white;border:1px solid var(--br);border-radius:6px;padding:0.875rem;text-align:center">
+    <div style="font-size:0.72rem;color:var(--gt);text-transform:uppercase;margin-bottom:0.25rem">${label}</div>
+    <div style="font-size:1.3rem;font-weight:700;color:${color}">${value}</div>
+  </div>`;
+}
+
+function applyAI(d) {
+  // Store AI data for BKP override
+  storeAIData(d);
+  AI.source = uploadedFiles.filter(f=>f.status==='done').map(f=>f.name).join(', ');
+
+  const b = S.buildings[0];
+
+  // Apply building geometry from plan
+  if (d.gebaeude) {
+    if (d.gebaeude.laenge)          b.len    = d.gebaeude.laenge;
+    if (d.gebaeude.breite)          b.wid    = d.gebaeude.breite;
+    if (d.gebaeude.anzahl_geschosse) b.floors = d.gebaeude.anzahl_geschosse;
+    if (d.gebaeude.hoehe_gesamt)    b.height = +(d.gebaeude.hoehe_gesamt / Math.max(b.floors,1)).toFixed(1);
+  }
+
+  // Apply room areas by type
+  const byType = d.flaechenByType || {};
+  const wohn = (byType.wohnen||0) + (byType.schlafen||0);
+  if (wohn > 0)                       b.living  = +wohn.toFixed(1);
+  if (byType.kueche > 0)              b.kitchen = +(byType.kueche).toFixed(1);
+  if ((byType.bad||0)+(byType.wc||0)) b.bath    = +((byType.bad||0)+(byType.wc||0)).toFixed(1);
+
+  // Floor areas from total
+  if (d.gesamtflaeche > 0) {
+    b.parkett = +(d.gesamtflaeche * 0.65).toFixed(1);
+    b.tiles   = +(d.gesamtflaeche * 0.30).toFixed(1);
+  }
+
+  S.buildings[0] = b;
+
+  // Summary for user
+  const lines = [
+    `✅ KI-Analyse aus ${AI.source} übernommen`,
+    '',
+    `📐 Gebäude: ${b.len}m × ${b.wid}m · ${b.floors} Geschosse`,
+    `🏠 Wohnfläche: ${b.living} m²  ·  Küche: ${b.kitchen} m²  ·  Bad: ${b.bath} m²`,
+    `🪟 Fenster: ${d.fensterAnzahl||'?'} Stk · ${d.fensterTotal?.toFixed(1)||'?'} m² → BKP 231`,
+    `🚪 Türen: ${AI.doorInner||'?'} innen · ${AI.doorOuter||'?'} aussen · ${AI.doorBalcony||'?'} Balkon`,
+    '',
+    '→ BKP Kalkulation wurde automatisch mit diesen Werten befüllt.'
+  ];
+  alert(lines.join('\n'));
+  goTo('bkp');
+}
+
+// ─── BUILDINGS ────────────────────────────────────────────────────────────
+function getCur() { return S.buildings.find(b=>b.id===S.cur)||S.buildings[0]; }
+
+function addBuilding() {
+  const id = Math.max(...S.buildings.map(b=>b.id))+1;
+  S.buildings.push(freshBuilding(id));
+  S.cur = id;
+  renderSurfaces();
+}
+
+function removeBuilding() {
+  if (S.buildings.length<=1) { alert('Mindestens ein Gebäude erforderlich.'); return; }
+  if (!confirm('Gebäude "'+getCur().name+'" löschen?')) return;
+  S.buildings = S.buildings.filter(b=>b.id!==S.cur);
+  S.cur = S.buildings[0].id;
+  renderSurfaces();
+}
+
+function selectBuilding(id) {
+  saveCurFromForm();
+  S.cur = id;
+  loadForm();
+}
+
+function saveBField(k, v) { getCur()[k] = v; renderDevOverview(); }
+
+function saveCurFromForm() {
+  const b = getCur();
+  b.name = document.getElementById('bName').value;
+  b.type = document.getElementById('bType').value;
+  b.floors = +document.getElementById('bFloors').value||2;
+  b.height = +document.getElementById('bHeight').value||2.8;
+  b.len = +document.getElementById('bLen').value||0;
+  b.wid = +document.getElementById('bWid').value||0;
+  b.living = +document.getElementById('bLiving').value||0;
+  b.kitchen = +document.getElementById('bKitchen').value||0;
+  b.bath = +document.getElementById('bBath').value||0;
+  b.parkett = +document.getElementById('bParkett').value||0;
+  b.tiles = +document.getElementById('bTiles').value||0;
+}
+
+function loadForm() {
+  const b = getCur();
+  document.getElementById('bName').value = b.name;
+  document.getElementById('bType').value = b.type;
+  document.getElementById('bFloors').value = b.floors;
+  document.getElementById('bHeight').value = b.height;
+  document.getElementById('bLen').value = b.len;
+  document.getElementById('bWid').value = b.wid;
+  document.getElementById('bLiving').value = b.living||'';
+  document.getElementById('bKitchen').value = b.kitchen||'';
+  document.getElementById('bBath').value = b.bath||'';
+  document.getElementById('bParkett').value = b.parkett||'';
+  document.getElementById('bTiles').value = b.tiles||'';
+  document.getElementById('bFormTitle').textContent = b.name+' – Details';
+}
+
+function autoCalcBuilding(b) {
+  const fp = b.len*b.wid, ta = fp*b.floors;
+  b.living = +(ta*0.65).toFixed(1);
+  b.kitchen = +(ta*0.10).toFixed(1);
+  b.bath = +(ta*0.08).toFixed(1);
+  b.parkett = +(ta*0.70).toFixed(1);
+  b.tiles = +(ta*0.30).toFixed(1);
+}
+
+function autoCalc() {
+  saveCurFromForm();
+  autoCalcBuilding(getCur());
+  loadForm();
+  renderDevOverview();
+}
+
+function renderSurfaces() {
+  loadForm();
+  renderBuildingTabs();
+  renderDevOverview();
+  const nb = S.buildings.length;
+  document.getElementById('surfHeader').textContent = nb>1 ? 'Wohnüberbauung: '+nb+' Gebäude' : 'Gebäude & Flächen';
+  document.getElementById('surfSub').textContent = nb>1 
+    ? 'Mehrere Gebäude auf einer Parzelle – BKP 1 wird geteilt, BKP 2–4 pro Gebäude summiert'
+    : 'Einzelgebäude auf der Parzelle';
+}
+
+function renderBuildingTabs() {
+  document.getElementById('btabs').innerHTML = S.buildings.map(b=>`
+    <div class="btab${b.id===S.cur?' sel':''}" onclick="selectBuilding(${b.id})">
+      🏢 ${b.name}
+    </div>`).join('');
+}
+
+function renderDevOverview() {
+  let totalFP=0, totalGFA=0;
+  S.buildings.forEach(b=>{ const fp=b.len*b.wid; totalFP+=fp; totalGFA+=fp*b.floors; });
+  const html = `
+    <table class="ov-table" style="margin-top:0.5rem">
+      <thead>
+        <tr>
+          <th>Gebäude</th><th>Bauweise</th><th>Geschosse</th>
+          <th style="text-align:right">Grundfläche</th><th style="text-align:right">Geschossfläche</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${S.buildings.map(b=>{
+          const fp=b.len*b.wid;
+          return `<tr>
+            <td><strong>${b.name}</strong></td>
+            <td>${b.type==='timber'?'Holzbau':b.type==='solid'?'Massivbau':'Hybrid'}</td>
+            <td>${b.floors}</td>
+            <td style="text-align:right">${fp.toFixed(0)} m²</td>
+            <td style="text-align:right">${(fp*b.floors).toFixed(0)} m²</td>
+          </tr>`;
+        }).join('')}
+        <tr style="font-weight:700;background:#fafafa">
+          <td colspan="3">TOTAL</td>
+          <td style="text-align:right;color:var(--red)">${totalFP.toFixed(0)} m²</td>
+          <td style="text-align:right;color:var(--red)">${totalGFA.toFixed(0)} m²</td>
+        </tr>
+      </tbody>
+    </table>`;
+  document.getElementById('devOverview').innerHTML = html;
+}
+
+// ─── BKP ─────────────────────────────────────────────────────────────────
+// ─── AI DATA STORE ───────────────────────────────────────────────────────
+// Holds extracted values from Claude plan analysis
+const AI = {
+  windowArea: null,     // m² total from plans
+  windowCount: null,    // number of windows
+  doorInner: null,      // inner doors count
+  doorOuter: null,      // outer doors
+  doorBalcony: null,    // balcony/terrace doors
+  rooms: [],            // [{name, flaeche_m2, typ, raumhoehe_m}]
+  building: {},         // {laenge, breite, hoehe_gesamt, anzahl_geschosse}
+  source: null          // filename(s) analysed
+};
+
+// Called from applyAI - stores all extracted data
+function storeAIData(d) {
+  if (d.fensterTotal > 0)   AI.windowArea   = Math.round(d.fensterTotal * 100) / 100;
+  if (d.fensterAnzahl > 0)  AI.windowCount  = d.fensterAnzahl;
+  if (d.tueren) {
+    if (d.tueren.innen)            AI.doorInner   = d.tueren.innen;
+    if (d.tueren.aussen)           AI.doorOuter   = d.tueren.aussen;
+    if (d.tueren.balkon_terrasse)  AI.doorBalcony = d.tueren.balkon_terrasse;
+  }
+  if (d.raeume)    AI.rooms    = d.raeume;
+  if (d.gebaeude)  AI.building = d.gebaeude;
+}
+
+// Override formula quantity with AI value for specific positions
+function aiOverride(pos, formulaQty) {
+  if (!AI.source) return formulaQty; // no AI data loaded
+  const overrides = {
+    '231': AI.windowArea,        // Fenster 2-fach
+    '232': null,                  // 3-fach – user decides
+    '233': AI.doorOuter,          // Haustüre
+    '234': AI.doorBalcony,        // Balkontüren
+    '251': AI.doorInner,          // Zimmertüren
+    '261': null,                   // Parkett – from building data
+    '262': null,                   // Fliesen – from building data
+  };
+  const v = overrides[pos];
+  return (v !== null && v !== undefined && v > 0) ? Math.round(v * 100) / 100 : formulaQty;
+}
+
+// ─── BKP BUILDER ─────────────────────────────────────────────────────────
+function buildBKP() {
+  saveCurFromForm();
+  S.bkpItems = [];
+
+  const nb = S.buildings.length;
+  const isMulti = nb > 1;
+  const hasAI = AI.source !== null;
+
+  // ── Aggregate context (shared: BKP 1 & 4) ────────────────────────────
+  let shCtx = {
+    footprint:0, totalArea:0, perimeter:0, wallArea:0, floors:2,
+    bath:0, kitchen:0, parkett:0, tiles:0,
+    parcelArea: +document.getElementById('parcelArea').value || 0
+  };
+  S.buildings.forEach(b => {
+    const c = buildCtx(b);
+    shCtx.footprint  += c.footprint;
+    shCtx.totalArea  += c.totalArea;
+    shCtx.perimeter  += c.perimeter;
+    shCtx.wallArea   += c.wallArea;
+    shCtx.bath       += c.bath;
+    shCtx.kitchen    += c.kitchen;
+    shCtx.parkett    += c.parkett;
+    shCtx.tiles      += c.tiles;
+    shCtx.floors      = Math.max(shCtx.floors, b.floors);
+  });
+
+  // ── Group BKP positions ───────────────────────────────────────────────
+  const groups = {};
+  BKP.forEach(item => {
+    if (!groups[item.grp])
+      groups[item.grp] = { name:item.grpName, shared:item.shared, subs:{} };
+    if (!groups[item.grp].subs[item.sub])
+      groups[item.grp].subs[item.sub] = { name:item.subName, items:[] };
+    groups[item.grp].subs[item.sub].items.push(item);
+  });
+
+  // ── Banner ────────────────────────────────────────────────────────────
+  let html = '';
+
+  if (hasAI) {
+    html += `<div class="alert alert-green" style="margin-bottom:1rem">
+      🤖 <strong>KI-Daten aktiv</strong> – Aus Plananalyse: 
+      ${AI.windowArea ? AI.windowArea+' m² Fensterfläche · ' : ''}
+      ${AI.windowCount ? AI.windowCount+' Fenster · ' : ''}
+      ${AI.doorInner ? AI.doorInner+' Innentüren · ' : ''}
+      ${AI.doorOuter ? AI.doorOuter+' Aussentüren · ' : ''}
+      ${AI.doorBalcony ? AI.doorBalcony+' Balkontüren' : ''}
+      <span style="float:right;cursor:pointer;opacity:0.7" onclick="clearAI()">✕ KI-Daten löschen</span>
+    </div>`;
+  }
+
+  if (isMulti) {
+    html += `<div class="alert alert-info" style="margin-bottom:1rem">
+      🏘️ <strong>Wohnüberbauung – ${nb} Gebäude</strong>
+      <span style="font-size:0.85rem;margin-left:0.5rem">
+        BKP 1 &amp; 4 einmalig für Gesamtparzelle · BKP 2 &amp; 3 pro Gebäude summiert
+      </span>
+    </div>`;
+  }
+
+  // ── Render each BKP group ─────────────────────────────────────────────
+  Object.entries(groups).forEach(([grpKey, grp]) => {
+    let grpTotal = 0;
+
+    let rowsHTML = `<div class="bkp-header-row">
+      <div>Pos.</div>
+      <div>Bezeichnung</div>
+      <div style="text-align:right">Menge</div>
+      <div>Einheit</div>
+      <div style="text-align:right">CHF / Einheit</div>
+      <div style="text-align:right">Total CHF</div>
+    </div>`;
+
+    Object.entries(grp.subs).forEach(([subKey, sub]) => {
+      rowsHTML += `<div class="bkp-subsec">
+        <div class="bkp-subsec-title">${subKey} · ${sub.name}</div>
+      </div>`;
+
+      sub.items.forEach(item => {
+        // ── Calculate quantity ──────────────────────────────────────────
+        let qty = 0;
+        if (grp.shared) {
+          qty = Math.max(0, Math.round(evalF(item.f, shCtx) * 100) / 100);
+        } else {
+          S.buildings.forEach(b => {
+            qty += Math.max(0, evalF(item.f, buildCtx(b)));
+          });
+          qty = Math.round(qty * 100) / 100;
+        }
+
+        // ── AI override for specific positions ─────────────────────────
+        const aiQty = aiOverride(item.pos, qty);
+        const fromAI = aiQty !== qty && aiQty > 0;
+        qty = aiQty > 0 ? aiQty : qty;
+
+        const unitPrice = item.price * S.rf;
+        const total     = qty * unitPrice;
+        grpTotal       += total;
+
+        // ── Badges ─────────────────────────────────────────────────────
+        let badges = '';
+        if (fromAI)   badges += ' <span class="badge" style="background:#9c27b0;color:white">KI</span>';
+        else if (qty > 0 && item.f)
+                      badges += ' <span class="badge" style="background:#e0e0e0;color:#555">auto</span>';
+        if (isMulti && grp.shared)  badges += ' <span class="badge badge-green">geteilt</span>';
+        if (isMulti && !grp.shared) badges += ` <span class="badge badge-blue">${nb}×</span>`;
+
+        // ── Store item ──────────────────────────────────────────────────
+        S.bkpItems.push({
+          pos: item.pos, name: item.name, qty, unit: item.unit,
+          unitPrice, total, grp: grpKey, fromAI
+        });
+
+        rowsHTML += `
+          <div class="bkp-row${qty > 0 ? (fromAI ? ' bkp-ai' : (item.f ? ' bkp-auto' : '')) : ''}">
+            <div class="bkp-num">${item.pos}</div>
+            <div class="bkp-name">${item.name}${badges}</div>
+            <div class="bkp-qty">
+              <input type="number"
+                     value="${qty > 0 ? qty : ''}"
+                     placeholder="0"
+                     style="text-align:right"
+                     onchange="updatePos('${item.pos}','${item.name}','${item.unit}',${item.price},'${grpKey}',this.value)">
+            </div>
+            <div class="bkp-unit">${item.unit}</div>
+            <div class="bkp-price">CHF ${unitPrice.toFixed(2)}</div>
+            <div class="bkp-total" id="r_${item.pos}">${total > 0 ? 'CHF ' + chf(total) : '–'}</div>
+          </div>`;
+      });
+    });
+
+    const sharedBadge = isMulti
+      ? (grp.shared
+          ? '<span class="badge badge-green" style="margin-left:0.5rem">Geteilt</span>'
+          : `<span class="badge badge-blue" style="margin-left:0.5rem">${nb}× Geb.</span>`)
+      : '';
+
+    html += `
+      <div class="bkp-section">
+        <div class="bkp-sec-header" onclick="toggleSection(this)">
+          <div class="bkp-sec-title">
+            <span style="font-weight:800;color:var(--red);min-width:28px">BKP ${grpKey}</span>
+            <span>${grp.name}</span>
+            ${sharedBadge}
+          </div>
+          <div style="display:flex;align-items:center;gap:1rem">
+            <div class="bkp-sec-total">CHF ${chf(grpTotal)}</div>
+            <span style="color:var(--gt);font-size:0.8rem">▼</span>
+          </div>
+        </div>
+        <div class="bkp-sec-body">${rowsHTML}</div>
+      </div>`;
+  });
+
+  document.getElementById('bkpTree').innerHTML = html;
+
+  const autoCnt  = S.bkpItems.filter(x => x.qty > 0 && !x.fromAI).length;
+  const aiCnt    = S.bkpItems.filter(x => x.fromAI).length;
+  const totalCnt = S.bkpItems.filter(x => x.qty > 0).length;
+
+  document.getElementById('bkpHeaderSub').textContent =
+    `${totalCnt} Positionen kalkuliert · `
+    + (aiCnt ? `${aiCnt}× aus KI-Plan · ` : '')
+    + `Region ${S.region} (×${S.rf})`
+    + (isMulti ? ` · ${nb} Gebäude` : '');
+}
+
+function clearAI() {
+  AI.windowArea = AI.windowCount = AI.doorInner = AI.doorOuter = AI.doorBalcony = AI.source = null;
+  AI.rooms = []; AI.building = {};
+  buildBKP();
+}
+
+function toggleSection(header) {
+  const body = header.nextElementSibling;
+  const arr = header.querySelector('span:last-child');
+  body.style.display = body.style.display==='none' ? '' : 'none';
+  arr.textContent = body.style.display==='none' ? '▶' : '▼';
+}
+
+function updatePos(pos, name, unit, basePrice, grp, val) {
+  const qty = parseFloat(val)||0;
+  const unitPrice = basePrice * S.rf;
+  const total = qty * unitPrice;
+  const el = document.getElementById('r_'+pos);
+  if (el) el.textContent = total>0 ? 'CHF '+chf(total) : '–';
+  const idx = S.bkpItems.findIndex(x=>x.pos===pos);
+  const item = { pos, name, qty, unit, unitPrice, total, grp };
+  if (idx>=0) S.bkpItems[idx]=item; else S.bkpItems.push(item);
+}
+
+// ─── SUMMARY ──────────────────────────────────────────────────────────────
+function buildSummary() {
+  let g1=0,g2=0,g3=0,g4=0;
+  S.bkpItems.forEach(x=>{ if(x.grp==='1')g1+=x.total; else if(x.grp==='2')g2+=x.total; else if(x.grp==='3')g3+=x.total; else if(x.grp==='4')g4+=x.total; });
+  const sub = g1+g2+g3+g4;
+  const con = sub*0.10, plan = sub*0.12, total = sub+con+plan;
+
+  let totalFP=0, totalGFA=0;
+  S.buildings.forEach(b=>{ const fp=b.len*b.wid; totalFP+=fp; totalGFA+=fp*b.floors; });
+
+  document.getElementById('summaryInfo').innerHTML = `
+    <div class="card-title">Projektübersicht</div>
+    <div class="form-grid" style="gap:0.75rem;margin-bottom:1rem">
+      <div><span style="font-size:0.8rem;color:var(--gt)">Projekt</span><br><strong>${document.getElementById('projName').value||'–'}</strong></div>
+      <div><span style="font-size:0.8rem;color:var(--gt)">Bauherr</span><br><strong>${document.getElementById('projClient').value||'–'}</strong></div>
+      <div><span style="font-size:0.8rem;color:var(--gt)">Standort</span><br><strong>${document.getElementById('projLocation').value||'–'}</strong></div>
+      <div><span style="font-size:0.8rem;color:var(--gt)">Region</span><br><strong>${S.region} (×${S.rf})</strong></div>
+    </div>
+    ${S.buildings.length>1?`
+    <div style="background:var(--bg);padding:1rem;border-radius:6px;border-left:4px solid var(--gn)">
+      <strong>🏘️ Wohnüberbauung</strong> &nbsp;·&nbsp; ${S.buildings.length} Gebäude &nbsp;·&nbsp; ${totalFP.toFixed(0)} m² Grundfläche &nbsp;·&nbsp; ${totalGFA.toFixed(0)} m² Geschossfläche
+    </div>`:''}`;
+
+  document.getElementById('costBox').innerHTML = `
+    <div class="card-title">Kostenübersicht nach BKP</div>
+    ${row('BKP 1 – Vorbereitungsarbeiten'+(S.buildings.length>1?' (gemeinsam)':''),g1)}
+    ${row('BKP 2 – Gebäude'+(S.buildings.length>1?' ('+S.buildings.length+'× summiert)':''),g2)}
+    ${row('BKP 3 – Betriebseinrichtungen',g3)}
+    ${row('BKP 4 – Umgebung'+(S.buildings.length>1?' (gemeinsam)':''),g4)}
+    ${row('Zwischensumme',sub)}
+    ${row('+ Unvorhergesehenes (10%)',con)}
+    ${row('+ Planung / Honorare (12%)',plan)}
+    <div class="cost-row"><span class="cost-label">GESAMTKOSTEN</span><span class="cost-val">CHF ${chf(total)}</span></div>
+    ${totalGFA>0?`<div style="margin-top:1rem;padding:0.75rem;background:var(--bg);border-radius:6px;font-size:0.875rem;display:flex;gap:2rem;flex-wrap:wrap">
+      <div><span style="color:var(--gt)">Kosten pro m² GF</span><br><strong>CHF ${chf(total/totalGFA)}/m²</strong></div>
+      ${S.buildings.length>1?`<div><span style="color:var(--gt)">Ø pro Gebäude</span><br><strong>CHF ${chf(total/S.buildings.length)}</strong></div>`:''}
+    </div>`:''}`;
+}
+
+function row(label, val) {
+  return val>0 ? `<div class="cost-row"><span class="cost-label">${label}</span><span class="cost-val">CHF ${chf(val)}</span></div>` : '';
+}
+
+// ─── PDF EXPORT ───────────────────────────────────────────────────────────
+function exportPDF() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF('p','mm','a4');
+  const W = 210, pw = 170, lm = 20;
+  const projName   = document.getElementById('projName').value   || '–';
+  const projClient = document.getElementById('projClient').value || '–';
+  const projLoc    = document.getElementById('projLocation').value || '–';
+  const projNum    = document.getElementById('projNum').value    || '–';
+  const dateStr    = new Date().toLocaleDateString('de-CH');
+
+  let totalFP=0,totalGFA=0;
+  S.buildings.forEach(b=>{ const f=b.len*b.wid; totalFP+=f; totalGFA+=f*b.floors; });
+
+  // ── PAGE 1: COVER ────────────────────────────────────────────────────────
+  // Red header bar
+  doc.setFillColor(211,47,47);
+  doc.rect(0,0,W,45,'F');
+
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(26);
+  doc.setTextColor(255,255,255);
+  doc.text('FOROL',lm,22);
+  doc.setFontSize(10);
+  doc.setFont('helvetica','normal');
+  doc.text('research lab',lm,30);
+  doc.setFontSize(12);
+  doc.text('Kostenvoranschlag nach BKP',W-lm,22,{align:'right'});
+  doc.setFontSize(9);
+  doc.text(dateStr,W-lm,30,{align:'right'});
+
+  // Project title
+  doc.setTextColor(30,30,30);
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(20);
+  doc.text(projName,lm,65);
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(11);
+  doc.setTextColor(100,100,100);
+  doc.text(projLoc,lm,73);
+
+  // Info grid
+  const infoY = 90;
+  doc.setFillColor(245,245,245);
+  doc.roundedRect(lm,infoY,pw,36,3,3,'F');
+  doc.setTextColor(120,120,120);
+  doc.setFontSize(8);
+  const cols = [[lm+5,'Bauherr',projClient],[lm+50,'Projektnummer',projNum],
+                [lm+100,'Region',S.region+' · Faktor '+S.rf],[lm+145,'Projekttyp',
+                  document.getElementById('projType')?.options[document.getElementById('projType')?.selectedIndex]?.text||'Neubau']];
+  cols.forEach(([x,l,v])=>{
+    doc.setFont('helvetica','normal');
+    doc.text(l,x,infoY+8);
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(9);
+    doc.setTextColor(30,30,30);
+    doc.text(v,x,infoY+16);
+    doc.setFontSize(8);
+    doc.setTextColor(120,120,120);
+  });
+
+  // Building table on cover (if multi)
+  let coverY = infoY+44;
+  if (S.buildings.length>1) {
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(11);
+    doc.setTextColor(211,47,47);
+    doc.text('Wohnüberbauung — '+S.buildings.length+' Gebäude',lm,coverY);
+    coverY+=6;
+    doc.autoTable({
+      startY: coverY,
+      head:[['Gebäude','Bauweise','Geschosse','Grundfläche m²','Geschossfläche m²']],
+      body: S.buildings.map(b=>{
+        const fp=b.len*b.wid;
+        return [b.name,
+          b.type==='timber'?'Holzbau':b.type==='solid'?'Massivbau':'Hybrid',
+          b.floors, fp.toFixed(0)+' m²', (fp*b.floors).toFixed(0)+' m²'];
+      }).concat([['TOTAL','','',totalFP.toFixed(0)+' m²',totalGFA.toFixed(0)+' m²']]),
+      theme:'grid',
+      headStyles:{fillColor:[211,47,47],fontSize:8,fontStyle:'bold'},
+      styles:{fontSize:9},
+      foot:[], showFoot:'never',
+      willDrawCell(d){ if(d.row.index===S.buildings.length && d.section==='body'){ d.cell.styles.fontStyle='bold'; d.cell.styles.fillColor=[245,245,245]; } }
+    });
+    coverY = doc.lastAutoTable.finalY+10;
+  }
+
+  // KI info if used
+  if (AI.source) {
+    doc.setFillColor(243,229,245);
+    doc.roundedRect(lm,coverY,pw,22,3,3,'F');
+    doc.setTextColor(106,28,137);
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(9);
+    doc.text('🤖 KI-Plananalyse verwendet',lm+4,coverY+7);
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(8);
+    doc.setTextColor(80,80,80);
+    doc.text(`Quelle: ${AI.source}`,lm+4,coverY+13);
+    const aiInfo = [AI.windowArea?`Fensterfläche: ${AI.windowArea} m²`:'',
+      AI.windowCount?`${AI.windowCount} Fenster`:'',
+      AI.doorInner?`${AI.doorInner} Innentüren`:''].filter(Boolean).join('  ·  ');
+    doc.text(aiInfo,lm+4,coverY+19);
+    coverY+=28;
+  }
+
+  // ── PAGE 2+: BKP TABLE PER GROUP ──────────────────────────────────────
+  const GRP_NAMES = {'1':'Vorbereitungsarbeiten','2':'Gebäude','3':'Betriebseinrichtungen','4':'Umgebung'};
+  const GRP_SHARED = {'1':true,'2':false,'3':false,'4':true};
+  const nb = S.buildings.length;
+
+  ['1','2','3','4'].forEach(grpKey => {
+    const grpItems = S.bkpItems.filter(x=>x.grp===grpKey && x.qty>0);
+    if (!grpItems.length) return;
+
+    doc.addPage();
+
+    // Section header
+    doc.setFillColor(211,47,47);
+    doc.rect(0,0,W,18,'F');
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(13);
+    doc.setTextColor(255,255,255);
+    doc.text(`BKP ${grpKey} — ${GRP_NAMES[grpKey]}`,lm,12);
+    doc.setFontSize(8);
+    doc.setFont('helvetica','normal');
+    const badge = GRP_SHARED[grpKey] ? 'Gemeinsam für Gesamtparzelle' : (nb>1?`Pro Gebäude × ${nb}`:'Einzelgebäude');
+    doc.text(badge,W-lm,12,{align:'right'});
+    doc.setTextColor(30,30,30);
+
+    // Sub-group sections
+    const subs = {};
+    grpItems.forEach(item => {
+      const sub = item.pos.substring(0,2);
+      if(!subs[sub]) subs[sub]=[];
+      subs[sub].push(item);
+    });
+
+    let startY = 26;
+    Object.entries(subs).forEach(([sub, items]) => {
+      const subTot = items.reduce((s,x)=>s+x.total,0);
+      doc.autoTable({
+        startY,
+        head:[[
+          {content:'Pos.',styles:{cellWidth:14}},
+          {content:'Bezeichnung',styles:{}},
+          {content:'Menge',styles:{halign:'right',cellWidth:22}},
+          {content:'Einh.',styles:{cellWidth:14}},
+          {content:'CHF/Einh.',styles:{halign:'right',cellWidth:28}},
+          {content:'Total CHF',styles:{halign:'right',cellWidth:30}},
+          {content:'',styles:{cellWidth:8}}
+        ]],
+        body: items.map(x=>[
+          x.pos, x.name,
+          x.qty.toFixed(2), x.unit,
+          x.unitPrice.toFixed(2), chf(x.total),
+          x.fromAI?'KI':''
+        ]),
+        foot:[[{content:`Summe ${sub}`, colSpan:5, styles:{fontStyle:'bold',halign:'right'}},
+               {content:'CHF '+chf(subTot),styles:{fontStyle:'bold',halign:'right',textColor:[211,47,47]}},
+               '']],
+        showFoot:'lastPage',
+        theme:'grid',
+        headStyles:{fillColor:[66,66,66],fontSize:7,fontStyle:'bold',textColor:[255,255,255]},
+        footStyles:{fillColor:[245,245,245],fontSize:8},
+        styles:{fontSize:8},
+        columnStyles:{0:{cellWidth:14},2:{halign:'right'},3:{cellWidth:14},4:{halign:'right',cellWidth:28},5:{halign:'right',cellWidth:30},6:{cellWidth:8,fontSize:6,textColor:[150,50,150]}},
+        willDrawCell(d){ if(d.column.index===6 && d.cell.raw==='KI' && d.section==='body'){ d.cell.styles.fillColor=[243,229,245]; } }
+      });
+      startY = doc.lastAutoTable.finalY + 4;
+    });
+
+    // Group total
+    const grpTot = grpItems.reduce((s,x)=>s+x.total,0);
+    const ty = doc.lastAutoTable.finalY+6;
+    doc.setFillColor(211,47,47);
+    doc.roundedRect(lm,ty,pw,12,2,2,'F');
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(10);
+    doc.setTextColor(255,255,255);
+    doc.text(`BKP ${grpKey} Total`,lm+4,ty+8);
+    doc.text('CHF '+chf(grpTot),W-lm,ty+8,{align:'right'});
+  });
+
+  // ── FINAL PAGE: COST SUMMARY ───────────────────────────────────────────
+  doc.addPage();
+  doc.setFillColor(211,47,47);
+  doc.rect(0,0,W,18,'F');
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(13);
+  doc.setTextColor(255,255,255);
+  doc.text('Kostenübersicht & Zusammenfassung',lm,12);
+  doc.setTextColor(30,30,30);
+
+  let g1=0,g2=0,g3=0,g4=0;
+  S.bkpItems.forEach(x=>{if(x.grp==='1')g1+=x.total;else if(x.grp==='2')g2+=x.total;else if(x.grp==='3')g3+=x.total;else if(x.grp==='4')g4+=x.total;});
+  const sub=g1+g2+g3+g4, con=sub*0.10, plan=sub*0.12, tot=sub+con+plan;
+
+  const summaryData = [
+    ['BKP 1','Vorbereitungsarbeiten'+(S.buildings.length>1?' (gemeinsam)':''),chf(g1)],
+    ['BKP 2','Gebäude'+(S.buildings.length>1?` (${S.buildings.length}× summiert)`:''   ),chf(g2)],
+    ['BKP 3','Betriebseinrichtungen',chf(g3)],
+    ['BKP 4','Umgebung'+(S.buildings.length>1?' (gemeinsam)':''),chf(g4)],
+  ].filter(r=>parseFloat(r[2].replace(/[^0-9.]/g,''))>0);
+
+  doc.autoTable({
+    startY:26,
+    body: summaryData,
+    theme:'grid',
+    styles:{fontSize:10},
+    columnStyles:{0:{fontStyle:'bold',cellWidth:20,textColor:[211,47,47]},2:{halign:'right',fontStyle:'bold'}}
+  });
+
+  const sy = doc.lastAutoTable.finalY;
+  doc.autoTable({
+    startY: sy+2,
+    body:[
+      ['','Zwischensumme','CHF '+chf(sub)],
+      ['','+ Unvorhergesehenes (10%)','CHF '+chf(con)],
+      ['','+ Planung / Honorare (12%)','CHF '+chf(plan)],
+    ],
+    theme:'plain',
+    styles:{fontSize:9,textColor:[80,80,80]},
+    columnStyles:{0:{cellWidth:20},2:{halign:'right'}}
+  });
+
+  const gy = doc.lastAutoTable.finalY+4;
+  doc.setFillColor(211,47,47);
+  doc.roundedRect(lm,gy,pw,18,3,3,'F');
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(14);
+  doc.setTextColor(255,255,255);
+  doc.text('GESAMTKOSTEN',lm+5,gy+12);
+  doc.text('CHF '+chf(tot),W-lm,gy+12,{align:'right'});
+
+  // Metrics
+  if(totalGFA>0){
+    doc.setTextColor(30,30,30);
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(9);
+    const my = gy+26;
+    doc.setFillColor(245,245,245);
+    doc.roundedRect(lm,my,pw,20,3,3,'F');
+    doc.setFont('helvetica','bold');
+    doc.text('CHF '+chf(tot/totalGFA)+' / m²',lm+5,my+8);
+    doc.setFont('helvetica','normal');
+    doc.setTextColor(100,100,100);
+    doc.text('Kosten pro m² Geschossfläche',lm+5,my+15);
+    if(S.buildings.length>1){
+      doc.setFont('helvetica','bold');
+      doc.setTextColor(30,30,30);
+      doc.text('CHF '+chf(tot/S.buildings.length),lm+100,my+8);
+      doc.setFont('helvetica','normal');
+      doc.setTextColor(100,100,100);
+      doc.text('Ø Kosten pro Gebäude',lm+100,my+15);
+    }
+  }
+
+  // Signature line
+  const sigY = 240;
+  doc.setDrawColor(180,180,180);
+  doc.line(lm,sigY,lm+70,sigY);
+  doc.line(W-lm-70,sigY,W-lm,sigY);
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(8);
+  doc.setTextColor(120,120,120);
+  doc.text('Ort, Datum / Unterschrift Auftraggeber',lm,sigY+5);
+  doc.text('Ort, Datum / Unterschrift FOROL',W-lm-70,sigY+5);
+
+  // Footer on all pages
+  const pgCount = doc.getNumberOfPages();
+  for(let i=1;i<=pgCount;i++){
+    doc.setPage(i);
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(7);
+    doc.setTextColor(150,150,150);
+    doc.text('FOROL research lab · Kostenvoranschlag nach BKP · '+dateStr,lm,292);
+    doc.text(`Seite ${i} / ${pgCount}`,W-lm,292,{align:'right'});
+  }
+
+  const fname = `FOROL_KV_${(document.getElementById('projName').value||'Projekt').replace(/\s+/g,'_')}_${dateStr.replace(/\./g,'-')}.pdf`;
+  doc.save(fname);
+  console.log('PDF saved:', fname);
+}
+
+async function sendFOROL() {
+  // Collect all data
+  const projName   = document.getElementById('projName').value   || 'Unbenannt';
+  const projClient = document.getElementById('projClient').value || '';
+  const projLoc    = document.getElementById('projLocation').value || '';
+  const projNum    = document.getElementById('projNum').value    || '';
+
+  let g1=0,g2=0,g3=0,g4=0;
+  S.bkpItems.forEach(x=>{if(x.grp==='1')g1+=x.total;else if(x.grp==='2')g2+=x.total;else if(x.grp==='3')g3+=x.total;else if(x.grp==='4')g4+=x.total;});
+  const sub=g1+g2+g3+g4, tot=sub*1.22;
+
+  let totalFP=0,totalGFA=0;
+  S.buildings.forEach(b=>{ const f=b.len*b.wid; totalFP+=f; totalGFA+=f*b.floors; });
+
+  const payload = {
+    source: 'forol-research-lab',
+    version: '4.0',
+    timestamp: new Date().toISOString(),
+    project: {
+      name: projName,
+      number: projNum,
+      client: projClient,
+      location: projLoc,
+      region: S.region,
+      regionFactor: S.rf,
+      type: document.getElementById('projType')?.value || 'new',
+      finish: document.getElementById('projFinish')?.value || 'std',
+    },
+    buildings: S.buildings.map(b => ({
+      id: b.id,
+      name: b.name,
+      constructionType: b.type,
+      floors: b.floors,
+      floorHeight: b.height,
+      length: b.len,
+      width: b.wid,
+      footprint: b.len*b.wid,
+      gfa: b.len*b.wid*b.floors,
+      areas: { living:b.living, kitchen:b.kitchen, bath:b.bath, parkett:b.parkett, tiles:b.tiles }
+    })),
+    totals: { footprint:totalFP, gfa:totalGFA },
+    aiUsed: AI.source !== null,
+    aiSource: AI.source,
+    bkp: {
+      items: S.bkpItems.filter(x=>x.qty>0).map(x=>({
+        pos:x.pos, name:x.name, qty:x.qty, unit:x.unit,
+        unitPrice:x.unitPrice, total:x.total, group:x.grp, fromAI:x.fromAI||false
+      })),
+      totals: { bkp1:g1, bkp2:g2, bkp3:g3, bkp4:g4,
+                subtotal:sub, contingency:sub*0.10, planning:sub*0.12, total:tot },
+      costPerSqm: totalGFA>0 ? Math.round(tot/totalGFA) : null,
+      costPerBuilding: S.buildings.length>1 ? Math.round(tot/S.buildings.length) : null
+    }
+  };
+
+  loading('Wird an FOROL Futur übertragen…');
+
+  try {
+    // Real API call to rechnungen.forol.ch
+    // Use our own /api/export endpoint (proxies to FOROL Futur when configured)
+    const apiBase = window.location.hostname === 'localhost' ? '' : '';
+    const res = await fetch(apiBase + '/api/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Source': 'forol-research-lab' },
+      body: JSON.stringify(payload)
+    });
+
+    unload();
+
+    if (res.ok) {
+      const data = await res.json();
+      const msg = data.status === 'forwarded'
+        ? `✅ An FOROL Futur übertragen!\n\nProjekt-ID: ${data.futur?.id||data.referenceId}\nLink: ${data.futur?.url||'rechnungen.forol.ch'}`
+        : `✅ Export erfolgreich!\n\nReferenz: ${data.referenceId}\n${data.message||''}`;
+      alert(msg);
+    } else {
+      throw new Error('Status '+res.status);
+    }
+  } catch(err) {
+    unload();
+    // API not yet live — show what would be sent
+    const preview = JSON.stringify(payload, null, 2).substring(0, 600)+'…';
+    const confirmed = confirm(
+      `ℹ️ FOROL Futur API (rechnungen.forol.ch/api) noch nicht verbunden.\n\n`+
+      `Sobald die API aktiv ist, wird dieser Datensatz übertragen:\n\n`+
+      `Projekt: ${projName}\nKosten: CHF ${(tot).toLocaleString('de-CH')}\nGebäude: ${S.buildings.length}\nBKP-Positionen: ${S.bkpItems.filter(x=>x.qty>0).length}\n\n`+
+      `Jetzt PDF herunterladen stattdessen?`
+    );
+    if (confirmed) exportPDF();
+  }
+}
+
+// ─── NAVIGATION: EXTEND goTo ─────────────────────────────────────────────
+const _origGoTo = goTo;
+function goTo(page) {
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  const pg = document.getElementById('page-'+page);
+  const nv = document.getElementById('nav-'+page);
+  if (!pg) return;
+  pg.classList.add('active');
+  if (nv) nv.classList.add('active');
+  if (page==='surfaces')    renderSurfaces();
+  if (page==='bkp')         buildBKP();
+  if (page==='summary')     buildSummary();
+  if (page==='excavation')  initExcavation();
+  if (page==='utilization') initUtilization();
+  if (page==='prices')      renderPriceEditor();
+}
+
+// ─── ERDMASSEN-KALKULATOR ─────────────────────────────────────────────────
+function initExcavation() {
+  // Pre-fill from first building if available
+  const b = S.buildings[0];
+  if (b && b.len > 0) {
+    const el = document.getElementById('exLen');
+    const ew = document.getElementById('exWid');
+    if (el && !el.value) el.value = (b.len + 2).toFixed(1);
+    if (ew && !ew.value) ew.value = (b.wid + 2).toFixed(1);
+  }
+  calcExcavation();
+}
+
+function calcExcavation() {
+  const len   = parseFloat(document.getElementById('exLen')?.value) || 0;
+  const wid   = parseFloat(document.getElementById('exWid')?.value) || 0;
+  const depth = parseFloat(document.getElementById('exDepth')?.value) || 0;
+  const angle = parseFloat(document.getElementById('exSlope')?.value) || 45;
+  const humus = (parseFloat(document.getElementById('exHumus')?.value) || 30) / 100;
+  const factor = parseFloat(document.getElementById('exFactor')?.value) || 1.25;
+
+  if (!len || !wid || !depth) {
+    document.getElementById('excavationResult').innerHTML =
+      '<div class="alert alert-info">Bitte Länge, Breite und Tiefe eingeben.</div>';
+    return;
+  }
+
+  // Böschung (slope offset at top)
+  const rad    = angle * Math.PI / 180;
+  const offset = depth / Math.tan(rad);
+
+  // Volumes
+  const baseArea  = len * wid;
+  const topLen    = len + 2 * offset;
+  const topWid    = wid + 2 * offset;
+  const topArea   = topLen * topWid;
+  const midArea   = (len + offset) * (wid + offset); // Simpson
+  const volExcav  = (depth / 6) * (baseArea + 4 * midArea + topArea);
+  const volHumus  = topArea * humus;
+  const volTotal  = volExcav + volHumus;
+  const volLoose  = volTotal * factor;
+
+  // Costs (using current region factor)
+  const priceHumus  = 25  * S.rf;
+  const priceExcav  = 45  * S.rf;
+  const priceTransp = 35  * S.rf;
+  const pricePlan   = 18  * S.rf;
+
+  const costHumus  = volHumus * priceHumus;
+  const costExcav  = volExcav * priceExcav;
+  const costTransp = volLoose * priceTransp;
+  const costPlan   = topArea  * pricePlan;
+  const costTotal  = costHumus + costExcav + costTransp + costPlan;
+
+  const res = document.getElementById('excavationResult');
+  res.innerHTML = `
+    <div class="card" style="padding:1.5rem">
+      <div class="card-title">📊 Ergebnisse Erdmassen</div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;margin-bottom:1.5rem">
+        ${[['Humusabtrag',volHumus.toFixed(1)+' m³','#ff9800'],
+           ['Aushubvolumen',volExcav.toFixed(1)+' m³','var(--bl)'],
+           ['Volumen locker',volLoose.toFixed(1)+' m³','var(--purple)'],
+           ['Baugrubenfläche',topArea.toFixed(1)+' m²','var(--gn)']
+          ].map(([l,v,col])=>`
+          <div style="background:var(--bg);border-radius:6px;padding:1rem;text-align:center">
+            <div style="font-size:0.72rem;color:var(--gt);text-transform:uppercase">${l}</div>
+            <div style="font-size:1.3rem;font-weight:700;color:${col};margin-top:2px">${v}</div>
+          </div>`).join('')}
+      </div>
+
+      <table style="width:100%;border-collapse:collapse;font-size:0.875rem;margin-bottom:1rem">
+        <thead><tr style="background:var(--bg);border-bottom:2px solid var(--br)">
+          <th style="padding:0.5rem 1rem;text-align:left;font-size:0.75rem;color:var(--gt);text-transform:uppercase">BKP Pos.</th>
+          <th style="padding:0.5rem 1rem;text-align:left;font-size:0.75rem;color:var(--gt);text-transform:uppercase">Leistung</th>
+          <th style="padding:0.5rem 1rem;text-align:right;font-size:0.75rem;color:var(--gt);text-transform:uppercase">Menge</th>
+          <th style="padding:0.5rem 1rem;text-align:right;font-size:0.75rem;color:var(--gt);text-transform:uppercase">Einh.</th>
+          <th style="padding:0.5rem 1rem;text-align:right;font-size:0.75rem;color:var(--gt);text-transform:uppercase">CHF/Einh.</th>
+          <th style="padding:0.5rem 1rem;text-align:right;font-size:0.75rem;color:var(--gt);text-transform:uppercase">Total CHF</th>
+        </tr></thead>
+        <tbody>
+          ${[['121','Humusabtrag '+Math.round(humus*100)+' cm',volHumus.toFixed(1),'m³',priceHumus.toFixed(2),costHumus],
+             ['122','Baugrubenaushub Klasse 2',volExcav.toFixed(1),'m³',priceExcav.toFixed(2),costExcav],
+             ['123','Abtransport Material (locker)',volLoose.toFixed(1),'m³',priceTransp.toFixed(2),costTransp],
+             ['124','Planieren / Verdichten',topArea.toFixed(1),'m²',pricePlan.toFixed(2),costPlan],
+            ].map(([pos,name,qty,unit,ep,tot])=>`
+            <tr style="border-bottom:1px solid var(--br)">
+              <td style="padding:0.6rem 1rem;font-weight:700;color:var(--red)">${pos}</td>
+              <td style="padding:0.6rem 1rem">${name}</td>
+              <td style="padding:0.6rem 1rem;text-align:right">${qty}</td>
+              <td style="padding:0.6rem 1rem;color:var(--gt)">${unit}</td>
+              <td style="padding:0.6rem 1rem;text-align:right;color:var(--gt)">${ep}</td>
+              <td style="padding:0.6rem 1rem;text-align:right;font-weight:700">CHF ${chf(tot)}</td>
+            </tr>`).join('')}
+        </tbody>
+        <tfoot><tr style="background:var(--bg);border-top:2px solid var(--br)">
+          <td colspan="5" style="padding:0.75rem 1rem;font-weight:700;text-align:right">Total Erdarbeiten</td>
+          <td style="padding:0.75rem 1rem;text-align:right;font-weight:700;color:var(--red)">CHF ${chf(costTotal)}</td>
+        </tr></tfoot>
+      </table>
+
+      <div style="display:flex;gap:0.75rem;flex-wrap:wrap">
+        <button class="btn-red" onclick="applyExcavationToBKP(${volHumus.toFixed(1)},${volExcav.toFixed(1)},${volLoose.toFixed(1)},${topArea.toFixed(1)})">
+          → In BKP Kalkulation übernehmen
+        </button>
+      </div>
+    </div>`;
+
+  // Draw SVG cross-section
+  drawExcavationSVG(len, depth, offset, humus);
+}
+
+function drawExcavationSVG(len, depth, offset, humus) {
+  const svgW = 600, svgH = 280;
+  const scale = Math.min((svgW - 80) / (len + 2*offset + 4), (svgH - 100) / (depth + humus + 2));
+  const cx = svgW / 2;
+  const groundY = 60;
+  const lenPx = len * scale;
+  const depthPx = depth * scale;
+  const offsetPx = offset * scale;
+  const humusPx = humus * scale;
+
+  const lGround = cx - (len/2 + offset) * scale - 20;
+  const rGround = cx + (len/2 + offset) * scale + 20;
+  const lBase   = cx - lenPx/2;
+  const rBase   = cx + lenPx/2;
+  const baseY   = groundY + depthPx;
+  const lTop    = cx - (lenPx/2 + offsetPx);
+  const rTop    = cx + (lenPx/2 + offsetPx);
+
+  const svg = `<svg width="100%" viewBox="0 0 ${svgW} ${svgH}" style="border:1px solid var(--br);border-radius:8px;background:#f9f9f9;max-height:280px">
+    <!-- Humus layer -->
+    <rect x="${lGround}" y="${groundY - humusPx}" width="${rGround-lGround}" height="${humusPx}" fill="#8B6914" opacity="0.3"/>
+    <text x="${cx}" y="${groundY - humusPx/2 + 4}" text-anchor="middle" font-size="10" fill="#8B6914">Humus ${Math.round(humus*100)}cm</text>
+
+    <!-- Ground surface -->
+    <line x1="${lGround}" y1="${groundY}" x2="${rGround}" y2="${groundY}" stroke="#8B6914" stroke-width="2"/>
+
+    <!-- Excavation pit -->
+    <polygon points="${lTop},${groundY} ${rTop},${groundY} ${rBase},${baseY} ${lBase},${baseY}"
+      fill="#deb887" opacity="0.4" stroke="#8B4513" stroke-width="1.5"/>
+
+    <!-- Dimension lines -->
+    <line x1="${lBase}" y1="${baseY+15}" x2="${rBase}" y2="${baseY+15}" stroke="#333" stroke-width="1" marker-end="url(#arr)"/>
+    <line x1="${lTop}" y1="${groundY+30}" x2="${rTop}" y2="${groundY+30}" stroke="#333" stroke-width="1"/>
+    <text x="${cx}" y="${baseY+28}" text-anchor="middle" font-size="11" fill="#333">${len.toFixed(1)} m (Sohle)</text>
+    <text x="${cx}" y="${groundY+44}" text-anchor="middle" font-size="11" fill="#333">${(len+2*offset).toFixed(1)} m (Oberkante)</text>
+
+    <!-- Depth -->
+    <line x1="${rBase+20}" y1="${groundY}" x2="${rBase+20}" y2="${baseY}" stroke="#333" stroke-width="1"/>
+    <text x="${rBase+32}" y="${(groundY+baseY)/2+4}" font-size="11" fill="#333">${depth.toFixed(1)} m</text>
+
+    <!-- Labels -->
+    <text x="${cx}" y="24" text-anchor="middle" font-size="13" font-weight="bold" fill="#333">Querschnitt Baugrube</text>
+    <text x="${cx}" y="38" text-anchor="middle" font-size="10" fill="#666">Böschungswinkel: ${document.getElementById('exSlope')?.value||45}°</text>
+  </svg>`;
+
+  document.getElementById('excavationCanvas').innerHTML = svg;
+}
+
+function applyExcavationToBKP(volHumus, volExcav, volLoose, topArea) {
+  // Update BKP items directly
+  const overrides = { '121': volHumus, '122': volExcav, '123': volLoose, '124': topArea };
+  Object.entries(overrides).forEach(([pos, qty]) => {
+    const idx = S.bkpItems.findIndex(x=>x.pos===pos);
+    if (idx>=0) {
+      S.bkpItems[idx].qty = qty;
+      S.bkpItems[idx].total = qty * S.bkpItems[idx].unitPrice;
+    }
+    const el = document.getElementById('r_'+pos);
+    if (el) el.textContent = 'CHF '+chf(qty*(S.bkpItems.find(x=>x.pos===pos)?.unitPrice||0));
+  });
+  alert('✅ Erdmassen in BKP 1.2 übernommen!\n\nPositionen 121–124 wurden aktualisiert.');
+  goTo('bkp');
+}
+
+// ─── AUSNÜTZUNGSBERECHNUNG ────────────────────────────────────────────────
+function initUtilization() {
+  const area = document.getElementById('parcelArea')?.value;
+  if (area) document.getElementById('utArea').value = area;
+  calcUtilization();
+}
+
+function calcUtilization() {
+  const area    = parseFloat(document.getElementById('utArea')?.value) || 0;
+  const zone    = document.getElementById('utZone')?.value || 'W2';
+  const setback = parseFloat(document.getElementById('utSetback')?.value) || 3;
+  const numBldg = parseInt(document.getElementById('utForm')?.value) || 1;
+
+  if (!area) {
+    document.getElementById('utilizationResult').innerHTML =
+      '<div class="alert alert-info">Parzellenfläche eingeben.</div>';
+    return;
+  }
+
+  // Zone parameters (typical Swiss values)
+  const ZONES = {
+    'W2':  { az:0.35, cov:0.30, maxH:8.5,  floors:2, color:'#4caf50' },
+    'W3':  { az:0.45, cov:0.35, maxH:11.5, floors:3, color:'#2196f3' },
+    'W4':  { az:0.55, cov:0.40, maxH:14.5, floors:4, color:'#ff9800' },
+    'WG3': { az:0.50, cov:0.40, maxH:11.5, floors:3, color:'#9c27b0' },
+    'WG4': { az:0.60, cov:0.45, maxH:14.5, floors:4, color:'#f44336' },
+    'K':   { az:0.70, cov:0.50, maxH:14.5, floors:4, color:'#795548' },
+  };
+
+  const z = ZONES[zone] || ZONES['W2'];
+  const maxGFA = area * z.az;
+  const maxCov = area * z.cov;
+
+  // Available footprint after setbacks (simplified square parcel)
+  const side       = Math.sqrt(area);
+  const innerSide  = Math.max(0, side - 2 * setback);
+  const innerArea  = innerSide * innerSide;
+  const actualCov  = Math.min(maxCov, innerArea);
+
+  // Per building
+  const covPerBldg = actualCov / numBldg;
+  const gfaPerBldg = maxGFA / numBldg;
+  const floorsPerBldg = Math.min(z.floors, Math.ceil(gfaPerBldg / covPerBldg));
+  const dimPerBldg = Math.sqrt(covPerBldg);
+
+  const res = document.getElementById('utilizationResult');
+  res.innerHTML = `
+    <div class="card" style="padding:1.5rem">
+      <div class="card-title">📊 Ausnützungsberechnung Zone ${zone}</div>
+
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;margin-bottom:1.5rem">
+        ${[['Max. GFA gesamt',maxGFA.toFixed(0)+' m²',z.color],
+           ['Max. Überbauung',maxCov.toFixed(0)+' m²',z.color],
+           ['Max. Geschosse',z.floors,'#333'],
+           ['Max. Gebäudehöhe',z.maxH+' m','#333']
+          ].map(([l,v,col])=>`
+          <div style="background:var(--bg);border-radius:6px;padding:1rem;text-align:center">
+            <div style="font-size:0.72rem;color:var(--gt);text-transform:uppercase">${l}</div>
+            <div style="font-size:1.3rem;font-weight:700;color:${col};margin-top:2px">${v}</div>
+          </div>`).join('')}
+      </div>
+
+      ${numBldg > 1 ? `
+      <div style="background:var(--bg);padding:1rem;border-radius:6px;margin-bottom:1.5rem">
+        <strong>Aufteilung auf ${numBldg} Gebäude:</strong>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-top:0.75rem;font-size:0.875rem">
+          <div><span style="color:var(--gt)">GFA pro Gebäude</span><br><strong>${gfaPerBldg.toFixed(0)} m²</strong></div>
+          <div><span style="color:var(--gt)">Grundfläche pro Geb.</span><br><strong>${covPerBldg.toFixed(0)} m²</strong></div>
+          <div><span style="color:var(--gt)">Empf. Geschosse</span><br><strong>${floorsPerBldg}</strong></div>
+        </div>
+        <div style="margin-top:0.75rem;padding:0.75rem;background:white;border-radius:4px;font-size:0.85rem;color:var(--gt)">
+          💡 Empfehlung: ${numBldg} Gebäude à ca. <strong>${dimPerBldg.toFixed(1)}m × ${dimPerBldg.toFixed(1)}m</strong> mit <strong>${floorsPerBldg} Geschossen</strong>
+        </div>
+      </div>` : ''}
+
+      <div style="background:white;border:1px solid var(--br);border-radius:6px;overflow:hidden">
+        <table style="width:100%;border-collapse:collapse;font-size:0.875rem">
+          <thead><tr style="background:var(--bg)">
+            <th style="padding:0.6rem 1rem;text-align:left;font-size:0.75rem;color:var(--gt);text-transform:uppercase">Parameter</th>
+            <th style="padding:0.6rem 1rem;text-align:right;font-size:0.75rem;color:var(--gt);text-transform:uppercase">Vorschrift</th>
+            <th style="padding:0.6rem 1rem;text-align:right;font-size:0.75rem;color:var(--gt);text-transform:uppercase">Berechnet</th>
+          </tr></thead>
+          <tbody>
+            ${[['Ausnützungsziffer',z.az,area*z.az+' m²'],
+               ['Überbauungsziffer',z.cov,maxCov.toFixed(0)+' m²'],
+               ['Max. Geschosse',z.floors,'–'],
+               ['Gebäudehöhe','≤ '+z.maxH+' m','–'],
+               ['Grenzabstand','≥ '+setback+' m','–'],
+              ].map(([l,v1,v2])=>`
+              <tr style="border-bottom:1px solid var(--br)">
+                <td style="padding:0.6rem 1rem">${l}</td>
+                <td style="padding:0.6rem 1rem;text-align:right;color:var(--gt)">${v1}</td>
+                <td style="padding:0.6rem 1rem;text-align:right;font-weight:600;color:var(--red)">${v2}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="btn-group" style="margin-top:1.5rem">
+        <button class="btn-red" onclick="applyUtilizationToBuildings(${covPerBldg.toFixed(0)},${floorsPerBldg},${dimPerBldg.toFixed(1)},${numBldg})">
+          → Auf Gebäude übernehmen
+        </button>
+      </div>
+    </div>`;
+}
+
+function applyUtilizationToBuildings(covPerBldg, floors, dim, numBldg) {
+  // Ensure enough buildings exist
+  while (S.buildings.length < numBldg) {
+    const id = Math.max(...S.buildings.map(b=>b.id))+1;
+    S.buildings.push(freshBuilding(id));
+  }
+  // Apply dimensions to each building
+  S.buildings.slice(0,numBldg).forEach(b => {
+    b.floors = floors;
+    b.len    = +dim;
+    b.wid    = +dim;
+    autoCalcBuilding(b);
+  });
+  S.cur = S.buildings[0].id;
+  alert(`✅ Übernommen!\n${numBldg} Gebäude à ${dim}m × ${dim}m · ${floors} Geschosse\n\nFlächen wurden automatisch berechnet.`);
+  goTo('surfaces');
+}
+
+// ─── EIGENE PREISDATENBANK ────────────────────────────────────────────────
+// Custom price overrides map: pos -> price
+const CUSTOM_PRICES = {};
+
+function renderPriceEditor() {
+  const el = document.getElementById('priceEditor');
+  if (!el) return;
+  let html = `<div style="max-height:500px;overflow-y:auto">
+    <div style="display:grid;grid-template-columns:80px 1fr 80px 120px 120px;gap:0.75rem;
+      padding:0.5rem 0.75rem;background:var(--bg);border-radius:6px;margin-bottom:0.5rem;
+      font-size:0.75rem;font-weight:600;color:var(--gt);text-transform:uppercase">
+      <div>Pos.</div><div>Bezeichnung</div><div>Einheit</div>
+      <div style="text-align:right">CRB Preis</div><div style="text-align:right">Eigener Preis</div>
+    </div>`;
+
+  BKP.forEach(item => {
+    const custom = CUSTOM_PRICES[item.pos];
+    const baseAdj = (item.price * S.rf).toFixed(2);
+    html += `<div style="display:grid;grid-template-columns:80px 1fr 80px 120px 120px;gap:0.75rem;
+      align-items:center;padding:0.5rem 0.75rem;border-bottom:1px solid var(--br);font-size:0.85rem;
+      background:${custom?'#fff8e1':'white'}">
+      <div style="font-weight:700;color:var(--red);font-size:0.8rem">${item.pos}</div>
+      <div>${item.name}</div>
+      <div style="color:var(--gt);font-size:0.8rem">${item.unit}</div>
+      <div style="text-align:right;color:var(--gt)">CHF ${baseAdj}</div>
+      <div>
+        <input type="number" value="${custom||''}" placeholder="${baseAdj}"
+          step="0.01" style="width:100%;text-align:right;padding:0.35rem 0.5rem;font-size:0.85rem"
+          onchange="setCustomPrice('${item.pos}',this.value)">
+      </div>
+    </div>`;
+  });
+
+  html += '</div>';
+  const customCount = Object.keys(CUSTOM_PRICES).length;
+  if (customCount > 0) {
+    html = `<div class="alert alert-green" style="margin-bottom:1rem">
+      ✅ ${customCount} eigene Preise aktiv. Diese überschreiben die CRB-Richtwerte in der BKP-Kalkulation.
+    </div>` + html;
+  }
+  el.innerHTML = html;
+}
+
+function setCustomPrice(pos, val) {
+  const v = parseFloat(val);
+  if (v > 0) CUSTOM_PRICES[pos] = v;
+  else delete CUSTOM_PRICES[pos];
+
+  // Update BKP item price if loaded
+  const idx = S.bkpItems.findIndex(x=>x.pos===pos);
+  if (idx>=0 && v>0) {
+    S.bkpItems[idx].unitPrice = v;
+    S.bkpItems[idx].total = S.bkpItems[idx].qty * v;
+  }
+}
+
+function importCSV(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const lines = e.target.result.split('\n').filter(l=>l.trim());
+    let imported = 0, errors = 0;
+    lines.forEach(line => {
+      const parts = line.split(/[;,]/).map(s=>s.trim());
+      if (parts.length >= 4) {
+        const [pos,,, price] = parts;
+        const p = parseFloat(price);
+        if (pos && p > 0) { CUSTOM_PRICES[pos] = p; imported++; }
+        else errors++;
+      }
+    });
+    document.getElementById('csvResult').innerHTML =
+      `<div class="alert alert-${imported>0?'green':'info'}">
+        ${imported>0?`✅ ${imported} Preise importiert.`:''}
+        ${errors>0?`⚠️ ${errors} Zeilen übersprungen.`:''}
+      </div>`;
+    renderPriceEditor();
+  };
+  reader.readAsText(file);
+}
+
+function downloadSampleCSV() {
+  const lines = ['Position;Bezeichnung;Einheit;Eigener Preis CHF',
+    ...BKP.slice(0,10).map(item=>`${item.pos};${item.name};${item.unit};${item.price.toFixed(2)}`)
+  ];
+  const blob = new Blob([lines.join('\n')], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'FOROL_Preise_Muster.csv';
+  a.click();
+}
+
+function resetPrices() {
+  if (!confirm('Alle eigenen Preise zurücksetzen?')) return;
+  Object.keys(CUSTOM_PRICES).forEach(k=>delete CUSTOM_PRICES[k]);
+  renderPriceEditor();
+}
+
+// ─── HELPERS ──────────────────────────────────────────────────────────────
+function chf(n) { return (+n||0).toLocaleString('de-CH',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function loading(msg) { document.getElementById('loader-msg').textContent=msg; document.getElementById('loader').classList.add('on'); }
+function unload() { document.getElementById('loader').classList.remove('on'); }
+function delay(ms) { return new Promise(r=>setTimeout(r,ms)); }
+
+// ─── INIT ─────────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded',()=>{
+  renderBuildingTabs();
+  renderDevOverview();
+});
+</script>
+</body>
+</html>
