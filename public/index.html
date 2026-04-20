@@ -815,15 +815,15 @@ async function onPLZInput(val) {
       if (r.ok) {
         const data = await r.json();
         if (data.results?.length > 0) {
-          const hits_api = data.results.filter(x => ['TG','SG','AI','AR'].includes(x.canton));
+          const hits_api = data.results; // already filtered TG/SG/AI/AR on server
           if (hits_api.length === 1) {
-            selectPLZEntry(+val, hits_api[0].commune || hits_api[0].name, hits_api[0].canton);
+            selectPLZEntry(+val, hits_api[0].name, hits_api[0].canton);
             return;
           } else if (hits_api.length > 1) {
             out.innerHTML = '<span style="color:var(--gt)">Bitte wählen:</span>';
             matches.innerHTML = hits_api.map(e =>
-              `<button class="btn-white" onclick="selectPLZEntry(${val},'${e.commune||e.name}','${e.canton}')" style="margin:0.25rem 0.25rem 0 0;font-size:0.82rem">
-                ${val} ${e.commune||e.name} <span class="badge badge-green">${e.canton}</span>
+              `<button class="btn-white" onclick="selectPLZEntry(${val},'${e.name}','${e.canton}')" style="margin:0.25rem 0.25rem 0 0;font-size:0.82rem">
+                ${val} ${e.name} <span class="badge badge-green">${e.canton}</span>
               </button>`).join('');
             return;
           }
