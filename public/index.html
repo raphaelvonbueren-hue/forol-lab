@@ -793,7 +793,7 @@ const PLZ_DB = [
 // Current selected PLZ entry
 let selectedPLZ = null;
 
-function onPLZInput(val) {
+async function onPLZInput(val) {
   const out = document.getElementById('plzResult');
   const matches = document.getElementById('plzMatches');
   selectedPLZ = null;
@@ -802,6 +802,34 @@ function onPLZInput(val) {
     out.innerHTML = '<span style="color:var(--gt)">wird automatisch gefüllt</span>';
     matches.innerHTML = '';
     return;
+  }
+
+  // Try live API first (on Vercel), fallback to local PLZ_DB
+  if (val.length >= 4) {
+    try {
+      const r = await fetch('/api/geoportal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'plz_lookup', params: { plz: val } })
+      });
+      if (r.ok) {
+        const data = await r.json();
+        if (data.results?.length > 0) {
+          const hits_api = data.results.filter(x => ['TG','SG','AI','AR'].includes(x.canton));
+          if (hits_api.length === 1) {
+            selectPLZEntry(+val, hits_api[0].commune || hits_api[0].name, hits_api[0].canton);
+            return;
+          } else if (hits_api.length > 1) {
+            out.innerHTML = '<span style="color:var(--gt)">Bitte wählen:</span>';
+            matches.innerHTML = hits_api.map(e =>
+              `<button class="btn-white" onclick="selectPLZEntry(${val},'${e.commune||e.name}','${e.canton}')" style="margin:0.25rem 0.25rem 0 0;font-size:0.82rem">
+                ${val} ${e.commune||e.name} <span class="badge badge-green">${e.canton}</span>
+              </button>`).join('');
+            return;
+          }
+        }
+      }
+    } catch(e) { /* fallback to local DB */ }
   }
 
   const hits = PLZ_DB.filter(r => String(r[0]).startsWith(val));
@@ -875,12 +903,57 @@ async function lookupParcel() {
     return;
   }
 
-  const munKey = selectedPLZ[1].replace(/\s.*/,''); // Use first word as key for PARCELS lookup
   loading(`Parzelle ${num} in ${selectedPLZ[1]} (${selectedPLZ[2]}) wird gesucht…`);
-  await delay(1200);
+
+  // Try real geoportal API first
+  try {
+    const r = await fetch('/api/geoportal', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'parcel_search',
+        params: { municipality: selectedPLZ[1], parcelNumber: num, canton: selectedPLZ[2] }
+      })
+    });
+    if (r.ok) {
+      const data = await r.json();
+      if (data.found && data.area) {
+        unload();
+        // Got real data from geoportal!
+        const area     = Math.round(data.area);
+        const maxFP    = Math.round(area * 0.30); // default coverage until zone lookup
+        const recFloors = 2;
+        const dim      = Math.round(Math.sqrt(maxFP / recFloors));
+
+        out.innerHTML = `
+          <div class="result-card" style="background:linear-gradient(135deg,#1565c0,#0d47a1)">
+            <strong>✅ Echte Grundbuchdaten — ${selectedPLZ[0]} ${selectedPLZ[1]} (${selectedPLZ[2]})</strong>
+            <div style="font-size:0.78rem;opacity:0.8;margin-top:0.2rem">Quelle: geodienste.ch · EGRID: ${data.egrid||'–'}</div>
+            <div class="result-grid" style="margin-top:0.75rem">
+              <div class="result-item"><div class="result-item-label">Parzellenfläche</div><div class="result-item-value">${area} m²</div></div>
+              <div class="result-item"><div class="result-item-label">Grundbuchnr.</div><div class="result-item-value">${data.number||num}</div></div>
+              <div class="result-item"><div class="result-item-label">Gemeinde</div><div class="result-item-value">${data.municipality||selectedPLZ[1]}</div></div>
+              <div class="result-item"><div class="result-item-label">Kanton</div><div class="result-item-value">${data.canton||selectedPLZ[2]}</div></div>
+              <div class="result-item"><div class="result-item-label">EGRID</div><div class="result-item-value" style="font-size:0.85rem">${data.egrid||'–'}</div></div>
+              <div class="result-item"><div class="result-item-label">Koordinaten</div><div class="result-item-value" style="font-size:0.8rem">verfügbar</div></div>
+            </div>
+            <div style="margin-top:0.75rem;font-size:0.85rem;opacity:0.9">
+              💡 Empfehlung: ${recFloors} Geschosse · ca. ${dim}m × ${dim}m
+            </div>
+            <button class="btn-green" style="margin-top:1rem;width:100%"
+              onclick='applyParcel(${JSON.stringify({area,slope:0,soil:2,cov:0.30,az:0.35,zone:"W2",h:10.5})},${recFloors},${dim})'>
+              Echte Daten übernehmen →
+            </button>
+          </div>`;
+        return;
+      }
+    }
+  } catch(e) { /* fall through to mock DB */ }
+
+  await delay(800);
   unload();
 
-  // Try exact municipality match, then fuzzy
+  // Fallback: mock database
   let p = null;
   for (const [key, list] of Object.entries(PARCELS)) {
     if (selectedPLZ[1].toLowerCase().includes(key.toLowerCase()) ||
