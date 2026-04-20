@@ -71,6 +71,18 @@ button{font-family:'Inter',sans-serif;padding:0.65rem 1.25rem;border:none;border
 .btab.sel{background:var(--red);color:white;border-color:var(--red)}
 .btab:hover:not(.sel){border-color:var(--red)}
 
+
+/* PARCEL MAP */
+#parcelMapWrap{margin-top:1rem;border-radius:10px;overflow:hidden;border:2px solid var(--br);display:none;position:relative}
+#parcelMap{height:320px;width:100%}
+.map-badge{position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:999;background:rgba(0,0,0,0.75);color:white;padding:0.25rem 0.75rem;border-radius:20px;font-size:0.75rem;pointer-events:none;white-space:nowrap}
+.kbs-warning{background:#fff3e0;border:2px solid #ff6d00;border-radius:8px;padding:0.9rem 1.1rem;margin-top:0.75rem;display:flex;align-items:flex-start;gap:0.7rem}
+.kbs-warning-icon{font-size:1.6rem;flex-shrink:0;margin-top:0.1rem}
+.kbs-warning-body{flex:1}
+.kbs-warning-title{font-weight:700;color:#e65100;font-size:0.95rem;margin-bottom:0.25rem}
+.kbs-warning-detail{font-size:0.82rem;color:#5d4037;line-height:1.5}
+.tree-dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:#2e7d32;margin-right:4px}
+
 /* BKP TABLE */
 .bkp-section{background:white;border:1px solid var(--br);border-radius:8px;margin-bottom:1rem;overflow:hidden}
 .bkp-sec-header{padding:0.9rem 1.25rem;background:#fafafa;border-bottom:1px solid var(--br);cursor:pointer;display:flex;justify-content:space-between;align-items:center;user-select:none}
@@ -236,6 +248,10 @@ button{font-family:'Inter',sans-serif;padding:0.65rem 1.25rem;border:none;border
           </div>
           <div id="plzMatches" style="margin-top:0.5rem"></div>
           <div id="lookupResult"></div>
+          <div id="parcelMapWrap">
+            <div class="map-badge" id="mapBadge">🛰️ Swisstopo Orthofoto</div>
+            <div id="parcelMap"></div>
+          </div>
         </div>
       </div>
 
@@ -574,73 +590,99 @@ const PARCELS = {
 // BKP Nummern: 1-stellig Hauptgruppe, 2-stellig Untergruppe
 // Positionen werden als z.B. "211" dargestellt (BKP 2, Untergruppe 11)
 const BKP = [
-  // HAUPTGRUPPE 1 – VORBEREITUNGSARBEITEN
-  { grp:'1', grpName:'Vorbereitungsarbeiten', shared:true, sub:'11', subName:'Baustelleneinrichtung', pos:'111', name:'Baustellenzufahrt temporär', unit:'m', price:120, f:null },
-  { grp:'1', grpName:'Vorbereitungsarbeiten', shared:true, sub:'11', subName:'Baustelleneinrichtung', pos:'112', name:'Baustrom / Wasser Anschluss', unit:'psch', price:3500, f:'fixed:1' },
-  { grp:'1', grpName:'Vorbereitungsarbeiten', shared:true, sub:'11', subName:'Baustelleneinrichtung', pos:'113', name:'Baucontainer + WC', unit:'Mt', price:800, f:null },
-  { grp:'1', grpName:'Vorbereitungsarbeiten', shared:true, sub:'12', subName:'Aushub / Erdarbeiten', pos:'121', name:'Humusabtrag 20 cm', unit:'m³', price:25, f:'parcelArea*0.2' },
-  { grp:'1', grpName:'Vorbereitungsarbeiten', shared:true, sub:'12', subName:'Aushub / Erdarbeiten', pos:'122', name:'Baugrubenaushub Klasse 2', unit:'m³', price:45, f:'footprint*1.5' },
-  { grp:'1', grpName:'Vorbereitungsarbeiten', shared:true, sub:'12', subName:'Aushub / Erdarbeiten', pos:'123', name:'Abtransport Material Deponie', unit:'m³', price:35, f:'footprint*1.5' },
-  { grp:'1', grpName:'Vorbereitungsarbeiten', shared:true, sub:'12', subName:'Aushub / Erdarbeiten', pos:'124', name:'Planieren / Verdichten Baugrund', unit:'m²', price:20, f:'footprint' },
-  { grp:'1', grpName:'Vorbereitungsarbeiten', shared:true, sub:'13', subName:'Fundamente / Bodenplatte', pos:'131', name:'Sauberkeitsschicht Beton 5 cm', unit:'m³', price:280, f:'footprint*0.05' },
-  { grp:'1', grpName:'Vorbereitungsarbeiten', shared:true, sub:'13', subName:'Fundamente / Bodenplatte', pos:'132', name:'Fundament Beton C25/30', unit:'m³', price:420, f:'footprint*0.3' },
-  { grp:'1', grpName:'Vorbereitungsarbeiten', shared:true, sub:'13', subName:'Fundamente / Bodenplatte', pos:'133', name:'Bodenplatte 20 cm mit Dämmung', unit:'m²', price:380, f:'footprint' },
-  { grp:'1', grpName:'Vorbereitungsarbeiten', shared:true, sub:'13', subName:'Fundamente / Bodenplatte', pos:'134', name:'Bewehrung Fundament / Platte', unit:'kg', price:2.80, f:'footprint*30' },
-  { grp:'1', grpName:'Vorbereitungsarbeiten', shared:true, sub:'13', subName:'Fundamente / Bodenplatte', pos:'135', name:'Perimeterdämmung XPS 12 cm', unit:'m²', price:95, f:'perimeter*1.5' },
+  // ═══════════════════════════════════════════
+  // BKP 1 – VORBEREITUNGSARBEITEN
+  // (Baustelleneinrichtung, Abbruch, Terrainarbeiten, Leitungen)
+  // ═══════════════════════════════════════════
+  { grp:'1', grpName:'Vorbereitungsarbeiten', shared:true, sub:'11', subName:'Baustelleneinrichtung', pos:'111', name:'Baustelleneinrichtung, Bauzaun', unit:'psch', price:8500, f:'fixed:1' },
+  { grp:'1', grpName:'Vorbereitungsarbeiten', shared:true, sub:'11', subName:'Baustelleneinrichtung', pos:'112', name:'Baustrom und Bauwasser', unit:'psch', price:3500, f:'fixed:1' },
+  { grp:'1', grpName:'Vorbereitungsarbeiten', shared:true, sub:'11', subName:'Baustelleneinrichtung', pos:'113', name:'Baucontainer, Sanitäranlagen', unit:'Mt', price:800, f:null },
+  { grp:'1', grpName:'Vorbereitungsarbeiten', shared:true, sub:'12', subName:'Abbruch und Entsorgung', pos:'121', name:'Abbruch bestehender Bauten', unit:'m³', price:180, f:null },
+  { grp:'1', grpName:'Vorbereitungsarbeiten', shared:true, sub:'12', subName:'Abbruch und Entsorgung', pos:'122', name:'Entsorgung Abbruchmaterial', unit:'t', price:120, f:null },
+  { grp:'1', grpName:'Vorbereitungsarbeiten', shared:true, sub:'13', subName:'Terrainarbeiten', pos:'131', name:'Humusabtrag (20 cm)', unit:'m³', price:25, f:'parcelArea*0.2' },
+  { grp:'1', grpName:'Vorbereitungsarbeiten', shared:true, sub:'13', subName:'Terrainarbeiten', pos:'132', name:'Baugrubenaushub Boden Kl. 2', unit:'m³', price:48, f:'footprint*1.8' },
+  { grp:'1', grpName:'Vorbereitungsarbeiten', shared:true, sub:'13', subName:'Terrainarbeiten', pos:'133', name:'Abtransport auf Deponie', unit:'m³', price:38, f:'footprint*1.8' },
+  { grp:'1', grpName:'Vorbereitungsarbeiten', shared:true, sub:'13', subName:'Terrainarbeiten', pos:'134', name:'Baugrubensicherung Verbau', unit:'m²', price:220, f:null },
+  { grp:'1', grpName:'Vorbereitungsarbeiten', shared:true, sub:'14', subName:'Leitungen Erstellung', pos:'141', name:'Werkleitungen Anschluss pauschal', unit:'psch', price:12000, f:'fixed:1' },
+  { grp:'1', grpName:'Vorbereitungsarbeiten', shared:true, sub:'14', subName:'Leitungen Erstellung', pos:'142', name:'Kanalisation Grundleitungen', unit:'lfm', price:280, f:'perimeter*1.2' },
+  { grp:'1', grpName:'Vorbereitungsarbeiten', shared:true, sub:'14', subName:'Leitungen Erstellung', pos:'143', name:'Wasserleitung Hausanschluss', unit:'lfm', price:180, f:null },
 
-  // HAUPTGRUPPE 2 – GEBÄUDE
-  { grp:'2', grpName:'Gebäude', shared:false, sub:'21', subName:'Rohbau / Tragkonstruktion', pos:'211', name:'Außenwände Holzrahmenbau', unit:'m²', price:420, f:'wallArea' },
-  { grp:'2', grpName:'Gebäude', shared:false, sub:'21', subName:'Rohbau / Tragkonstruktion', pos:'212', name:'Außenwände Massivbau Beton', unit:'m²', price:480, f:null },
-  { grp:'2', grpName:'Gebäude', shared:false, sub:'21', subName:'Rohbau / Tragkonstruktion', pos:'213', name:'Innenwände tragend Holz', unit:'m²', price:280, f:null },
-  { grp:'2', grpName:'Gebäude', shared:false, sub:'21', subName:'Rohbau / Tragkonstruktion', pos:'214', name:'Geschossdecke Holz 24 cm', unit:'m²', price:380, f:'footprint*(floors-1)' },
-  { grp:'2', grpName:'Gebäude', shared:false, sub:'21', subName:'Rohbau / Tragkonstruktion', pos:'215', name:'Dachkonstruktion Holz', unit:'m²', price:320, f:'footprint*1.3' },
-  { grp:'2', grpName:'Gebäude', shared:false, sub:'22', subName:'Fassade / Dach', pos:'221', name:'Fassadendämmung 18 cm', unit:'m²', price:180, f:'wallArea' },
-  { grp:'2', grpName:'Gebäude', shared:false, sub:'22', subName:'Fassade / Dach', pos:'222', name:'Fassadenverkleidung Holz', unit:'m²', price:220, f:null },
-  { grp:'2', grpName:'Gebäude', shared:false, sub:'22', subName:'Fassade / Dach', pos:'223', name:'Außenputz mineralisch', unit:'m²', price:145, f:'wallArea' },
-  { grp:'2', grpName:'Gebäude', shared:false, sub:'22', subName:'Fassade / Dach', pos:'224', name:'Dacheindeckung Ziegel', unit:'m²', price:185, f:'footprint*1.3' },
-  { grp:'2', grpName:'Gebäude', shared:false, sub:'22', subName:'Fassade / Dach', pos:'225', name:'Dachdämmung 22 cm', unit:'m²', price:120, f:'footprint*1.3' },
-  { grp:'2', grpName:'Gebäude', shared:false, sub:'22', subName:'Fassade / Dach', pos:'226', name:'Dachrinnen / Fallrohre', unit:'lfm', price:85, f:'perimeter' },
-  { grp:'2', grpName:'Gebäude', shared:false, sub:'23', subName:'Fenster / Außentüren', pos:'231', name:'Fenster Holz/Alu 2-fach VSG', unit:'m²', price:850, f:'totalArea*0.15' },
-  { grp:'2', grpName:'Gebäude', shared:false, sub:'23', subName:'Fenster / Außentüren', pos:'232', name:'Fenster Holz/Alu 3-fach VSG', unit:'m²', price:1050, f:null },
-  { grp:'2', grpName:'Gebäude', shared:false, sub:'23', subName:'Fenster / Außentüren', pos:'233', name:'Haustüre Standard', unit:'Stk', price:3200, f:'fixed:1' },
-  { grp:'2', grpName:'Gebäude', shared:false, sub:'23', subName:'Fenster / Außentüren', pos:'234', name:'Balkontüre / Terrassentüre', unit:'Stk', price:2800, f:null },
-  { grp:'2', grpName:'Gebäude', shared:false, sub:'24', subName:'Innenwände / Trennwände', pos:'241', name:'Leichtbauwand doppelt beplankt', unit:'m²', price:125, f:null },
-  { grp:'2', grpName:'Gebäude', shared:false, sub:'24', subName:'Innenwände / Trennwände', pos:'242', name:'Massivwand Backstein 11.5 cm', unit:'m²', price:180, f:null },
-  { grp:'2', grpName:'Gebäude', shared:false, sub:'24', subName:'Innenwände / Trennwände', pos:'243', name:'Installationswand Bad', unit:'m²', price:220, f:'bath*2.5*2' },
-  { grp:'2', grpName:'Gebäude', shared:false, sub:'25', subName:'Innentüren', pos:'251', name:'Zimmertüre CPL weiß', unit:'Stk', price:580, f:'totalArea/20' },
-  { grp:'2', grpName:'Gebäude', shared:false, sub:'25', subName:'Innentüren', pos:'252', name:'Zimmertüre Holzdekor', unit:'Stk', price:780, f:null },
-  { grp:'2', grpName:'Gebäude', shared:false, sub:'25', subName:'Innentüren', pos:'253', name:'Schiebetüre System', unit:'Stk', price:1680, f:null },
-  { grp:'2', grpName:'Gebäude', shared:false, sub:'26', subName:'Bodenbeläge', pos:'261', name:'Parkett Eiche 2-Schicht 11 mm', unit:'m²', price:145, f:'parkett' },
-  { grp:'2', grpName:'Gebäude', shared:false, sub:'26', subName:'Bodenbeläge', pos:'262', name:'Fliesen Standard 60×60', unit:'m²', price:125, f:'tiles' },
-  { grp:'2', grpName:'Gebäude', shared:false, sub:'26', subName:'Bodenbeläge', pos:'263', name:'Unterlagsboden Estrich 6 cm', unit:'m²', price:85, f:'totalArea' },
-  { grp:'2', grpName:'Gebäude', shared:false, sub:'26', subName:'Bodenbeläge', pos:'264', name:'Fußbodenheizung Verlegung', unit:'m²', price:65, f:'totalArea*0.8' },
-  { grp:'2', grpName:'Gebäude', shared:false, sub:'27', subName:'Wandbeläge / Malerarbeiten', pos:'271', name:'Gipsputz Wände innen', unit:'m²', price:42, f:'totalArea*3' },
-  { grp:'2', grpName:'Gebäude', shared:false, sub:'27', subName:'Wandbeläge / Malerarbeiten', pos:'272', name:'Malerarbeiten 2× weiß', unit:'m²', price:28, f:'totalArea*3' },
-  { grp:'2', grpName:'Gebäude', shared:false, sub:'27', subName:'Wandbeläge / Malerarbeiten', pos:'273', name:'Wandfliesen Bad / Küche', unit:'m²', price:135, f:'(bath+kitchen)*2' },
-  { grp:'2', grpName:'Gebäude', shared:false, sub:'28', subName:'Sanitär', pos:'281', name:'WC komplett Standard', unit:'Stk', price:850, f:'bath/6' },
-  { grp:'2', grpName:'Gebäude', shared:false, sub:'28', subName:'Sanitär', pos:'282', name:'Waschtisch + Unterschrank 90 cm', unit:'Stk', price:1200, f:'bath/6' },
-  { grp:'2', grpName:'Gebäude', shared:false, sub:'28', subName:'Sanitär', pos:'283', name:'Dusche bodengleich mit Glaswand', unit:'Stk', price:3200, f:'bath/8' },
-  { grp:'2', grpName:'Gebäude', shared:false, sub:'28', subName:'Sanitär', pos:'284', name:'Sanitärleitungen pro Nasszelle', unit:'psch', price:4500, f:'bath/6' },
-  { grp:'2', grpName:'Gebäude', shared:false, sub:'29', subName:'Küche', pos:'291', name:'Küchenzeile Standard 3 m', unit:'lfm', price:2800, f:'kitchen/3' },
-  { grp:'2', grpName:'Gebäude', shared:false, sub:'29', subName:'Küche', pos:'292', name:'Elektrogeräte Paket Standard', unit:'psch', price:3500, f:'kitchen/8' },
-  { grp:'2', grpName:'Gebäude', shared:false, sub:'29', subName:'Küche', pos:'293', name:'Spüle Edelstahl mit Armatur', unit:'Stk', price:650, f:'kitchen/8' },
+  // ═══════════════════════════════════════════
+  // BKP 2 – GEBÄUDE
+  // (Rohbau, Fassade, Fenster, Innenausbau, HLKS, Elektro)
+  // ═══════════════════════════════════════════
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'21', subName:'Fundament und Bodenplatte', pos:'211', name:'Sauberkeitsschicht Beton 8 cm', unit:'m³', price:280, f:'footprint*0.08' },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'21', subName:'Fundament und Bodenplatte', pos:'212', name:'Bodenplatte Stahlbeton 25 cm', unit:'m³', price:520, f:'footprint*0.25' },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'21', subName:'Fundament und Bodenplatte', pos:'213', name:'Perimeteridämmung XPS 12 cm', unit:'m²', price:95, f:'perimeter*1.5' },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'21', subName:'Fundament und Bodenplatte', pos:'214', name:'Bewehrung Fundament/Bodenplatte', unit:'kg', price:2.80, f:'footprint*35' },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'21', subName:'Fundament und Bodenplatte', pos:'215', name:'Kellerwände Stahlbeton 25 cm', unit:'m³', price:680, f:null },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'22', subName:'Rohbau Tragkonstruktion', pos:'221', name:'Aussenwände Holzrahmenbau', unit:'m²', price:420, f:'wallArea' },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'22', subName:'Rohbau Tragkonstruktion', pos:'222', name:'Aussenwände Massivbau Beton C30', unit:'m²', price:490, f:null },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'22', subName:'Rohbau Tragkonstruktion', pos:'223', name:'Innenwände tragend Holz', unit:'m²', price:280, f:null },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'22', subName:'Rohbau Tragkonstruktion', pos:'224', name:'Geschossdecke Holz/Beton 22 cm', unit:'m²', price:390, f:'footprint*(floors-1)' },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'22', subName:'Rohbau Tragkonstruktion', pos:'225', name:'Treppenkonstruktion Holz/Stahl', unit:'psch', price:18000, f:'floors>1?1:0' },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'23', subName:'Dach', pos:'231', name:'Dachstuhl Holzkonstruktion', unit:'m²', price:180, f:'footprint*1.25' },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'23', subName:'Dach', pos:'232', name:'Dachdämmung 24 cm', unit:'m²', price:130, f:'footprint*1.25' },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'23', subName:'Dach', pos:'233', name:'Dachdeckung Ziegel', unit:'m²', price:185, f:'footprint*1.25' },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'23', subName:'Dach', pos:'234', name:'Flachdach Abdichtung inkl. Aufbau', unit:'m²', price:380, f:null },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'23', subName:'Dach', pos:'235', name:'Dachrinnen und Fallrohre', unit:'lfm', price:85, f:'perimeter' },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'24', subName:'Fassade', pos:'241', name:'Aussendämmung WDVS 18 cm', unit:'m²', price:195, f:'wallArea' },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'24', subName:'Fassade', pos:'242', name:'Fassadenverkleidung Holz', unit:'m²', price:230, f:null },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'24', subName:'Fassade', pos:'243', name:'Aussenputz mineralisch', unit:'m²', price:145, f:'wallArea' },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'24', subName:'Fassade', pos:'244', name:'Hinterlüftete Fassade Faserzement', unit:'m²', price:320, f:null },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'25', subName:'Fenster und Aussentüren', pos:'251', name:'Fenster Holz/Alu 3-fach Verglasung', unit:'m²', price:1050, f:'totalArea*0.13' },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'25', subName:'Fenster und Aussentüren', pos:'252', name:'Haustüre Holz/Alu repräsentativ', unit:'Stk', price:4800, f:'fixed:1' },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'25', subName:'Fenster und Aussentüren', pos:'253', name:'Balkontüre / Terrassentüre 3-fach', unit:'Stk', price:3200, f:null },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'25', subName:'Fenster und Aussentüren', pos:'254', name:'Jalousien / Storen elektrisch', unit:'m²', price:380, f:'totalArea*0.10' },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'26', subName:'Innenausbau', pos:'261', name:'Leichtbauwand doppelt beplankt', unit:'m²', price:135, f:null },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'26', subName:'Innenausbau', pos:'262', name:'Zwischenwand Backstein 10 cm', unit:'m²', price:185, f:null },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'26', subName:'Innenausbau', pos:'263', name:'Gipsputz Wände innen', unit:'m²', price:45, f:'totalArea*2.8' },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'26', subName:'Innenausbau', pos:'264', name:'Unterlagsboden Zementestrich 7 cm', unit:'m²', price:90, f:'totalArea' },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'26', subName:'Innenausbau', pos:'265', name:'Parkett Eiche 2-Schicht 14 mm', unit:'m²', price:155, f:'parkett' },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'26', subName:'Innenausbau', pos:'266', name:'Keramische Fliesen 60×60', unit:'m²', price:135, f:'tiles' },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'26', subName:'Innenausbau', pos:'267', name:'Malerarbeiten 2× weiss', unit:'m²', price:30, f:'totalArea*2.8' },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'26', subName:'Innenausbau', pos:'268', name:'Wandfliesen Bad/Küche', unit:'m²', price:145, f:'(bath+kitchen)*2.5' },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'27', subName:'Innentüren', pos:'271', name:'Zimmertüre CPL weiss 90 cm', unit:'Stk', price:620, f:'totalArea/22' },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'27', subName:'Innentüren', pos:'272', name:'Schiebetüre Holz System', unit:'Stk', price:1850, f:null },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'27', subName:'Innentüren', pos:'273', name:'Badtüre WC-Garnitur', unit:'Stk', price:680, f:'bath/6' },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'28', subName:'Sanitär', pos:'281', name:'WC-Kombination Wand hängend', unit:'Stk', price:950, f:'bath/6' },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'28', subName:'Sanitär', pos:'282', name:'Waschtisch Möbel 90 cm', unit:'Stk', price:1350, f:'bath/6' },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'28', subName:'Sanitär', pos:'283', name:'Bodengleiche Dusche mit Glas', unit:'Stk', price:3500, f:'bath/8' },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'28', subName:'Sanitär', pos:'284', name:'Badewanne freistehend', unit:'Stk', price:2800, f:null },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'28', subName:'Sanitär', pos:'285', name:'Sanitärleitungen pro Nassraum', unit:'psch', price:5200, f:'bath/6' },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'29', subName:'Küche', pos:'291', name:'Kücheneinrichtung CHF/lfm', unit:'lfm', price:3200, f:'kitchen/3' },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'29', subName:'Küche', pos:'292', name:'Elektrogeräte Paket (Herd/GS/KS)', unit:'psch', price:4200, f:'kitchen/8' },
+  { grp:'2', grpName:'Gebäude', shared:false, sub:'29', subName:'Küche', pos:'293', name:'Spüle Edelstahl mit Armatur', unit:'Stk', price:720, f:'kitchen/8' },
 
-  // HAUPTGRUPPE 3 – BETRIEBSEINRICHTUNGEN
-  { grp:'3', grpName:'Betriebseinrichtungen', shared:false, sub:'31', subName:'Heizung / Lüftung', pos:'311', name:'Wärmepumpe Luft/Wasser 8 kW', unit:'Stk', price:18500, f:'totalArea<150?1:0' },
-  { grp:'3', grpName:'Betriebseinrichtungen', shared:false, sub:'31', subName:'Heizung / Lüftung', pos:'312', name:'Wärmepumpe Sole/Wasser 10 kW', unit:'Stk', price:25000, f:null },
-  { grp:'3', grpName:'Betriebseinrichtungen', shared:false, sub:'31', subName:'Heizung / Lüftung', pos:'313', name:'Fußbodenheizung Verteiler', unit:'psch', price:4500, f:'fixed:1' },
-  { grp:'3', grpName:'Betriebseinrichtungen', shared:false, sub:'31', subName:'Heizung / Lüftung', pos:'314', name:'Lüftungsanlage mit WRG', unit:'psch', price:15000, f:'totalArea>100?1:0' },
-  { grp:'3', grpName:'Betriebseinrichtungen', shared:false, sub:'32', subName:'Elektroinstallationen', pos:'321', name:'Hausanschluss + Hauptverteilung', unit:'psch', price:5500, f:'fixed:1' },
-  { grp:'3', grpName:'Betriebseinrichtungen', shared:false, sub:'32', subName:'Elektroinstallationen', pos:'322', name:'Elektroinstallation Standard', unit:'m²', price:85, f:'totalArea' },
-  { grp:'3', grpName:'Betriebseinrichtungen', shared:false, sub:'32', subName:'Elektroinstallationen', pos:'323', name:'Beleuchtung LED Basis', unit:'Stk', price:120, f:'totalArea/15' },
-  { grp:'3', grpName:'Betriebseinrichtungen', shared:false, sub:'32', subName:'Elektroinstallationen', pos:'324', name:'Photovoltaik 10 kWp', unit:'kWp', price:1650, f:null },
+  // ═══════════════════════════════════════════
+  // BKP 3 – BETRIEBSEINRICHTUNGEN
+  // (HLKS, Elektro, Aufzug, Haustechnik)
+  // ═══════════════════════════════════════════
+  { grp:'3', grpName:'Betriebseinrichtungen', shared:false, sub:'31', subName:'Heizung', pos:'311', name:'Wärmepumpe Luft/Wasser 8 kW', unit:'Stk', price:19500, f:'totalArea<150?1:0' },
+  { grp:'3', grpName:'Betriebseinrichtungen', shared:false, sub:'31', subName:'Heizung', pos:'312', name:'Wärmepumpe Sole/Wasser 12 kW', unit:'Stk', price:28000, f:null },
+  { grp:'3', grpName:'Betriebseinrichtungen', shared:false, sub:'31', subName:'Heizung', pos:'313', name:'Heizungsverteiler und Leitungen', unit:'psch', price:5500, f:'fixed:1' },
+  { grp:'3', grpName:'Betriebseinrichtungen', shared:false, sub:'32', subName:'Lüftung / Klima', pos:'321', name:'Komfortlüftung mit WRG', unit:'psch', price:16500, f:'totalArea>100?1:0' },
+  { grp:'3', grpName:'Betriebseinrichtungen', shared:false, sub:'32', subName:'Lüftung / Klima', pos:'322', name:'Fußbodenheizung Verteiler', unit:'psch', price:4800, f:'fixed:1' },
+  { grp:'3', grpName:'Betriebseinrichtungen', shared:false, sub:'33', subName:'Kälte', pos:'331', name:'Split-Klimaanlage je Wohneinheit', unit:'Stk', price:4500, f:null },
+  { grp:'3', grpName:'Betriebseinrichtungen', shared:false, sub:'34', subName:'Elektro Stark / Schwach', pos:'341', name:'Hausanschluss + HS-Verteilung', unit:'psch', price:6000, f:'fixed:1' },
+  { grp:'3', grpName:'Betriebseinrichtungen', shared:false, sub:'34', subName:'Elektro Stark / Schwach', pos:'342', name:'Elektroinstallation Standard', unit:'m²', price:90, f:'totalArea' },
+  { grp:'3', grpName:'Betriebseinrichtungen', shared:false, sub:'34', subName:'Elektro Stark / Schwach', pos:'343', name:'LED Beleuchtung Grundausstattung', unit:'Stk', price:135, f:'totalArea/15' },
+  { grp:'3', grpName:'Betriebseinrichtungen', shared:false, sub:'34', subName:'Elektro Stark / Schwach', pos:'344', name:'Photovoltaik 10 kWp inkl. WR', unit:'kWp', price:1750, f:null },
+  { grp:'3', grpName:'Betriebseinrichtungen', shared:false, sub:'34', subName:'Elektro Stark / Schwach', pos:'345', name:'Hausautomation KNX Basis', unit:'psch', price:12000, f:null },
 
-  // HAUPTGRUPPE 4 – UMGEBUNG
-  { grp:'4', grpName:'Umgebung', shared:true, sub:'41', subName:'Umgebungsarbeiten', pos:'411', name:'Gartenanlage / Humusierung', unit:'m²', price:35, f:'parcelArea-footprint' },
-  { grp:'4', grpName:'Umgebung', shared:true, sub:'41', subName:'Umgebungsarbeiten', pos:'412', name:'Rasensaat mit Ansaat', unit:'m²', price:18, f:'parcelArea-footprint' },
-  { grp:'4', grpName:'Umgebung', shared:true, sub:'41', subName:'Umgebungsarbeiten', pos:'413', name:'Terrasse Betonplatten 50×50', unit:'m²', price:180, f:'footprint*0.15' },
-  { grp:'4', grpName:'Umgebung', shared:true, sub:'41', subName:'Umgebungsarbeiten', pos:'414', name:'Zufahrt / Parkplatz Asphalt', unit:'m²', price:145, f:'fixed:30' },
-  { grp:'4', grpName:'Umgebung', shared:true, sub:'41', subName:'Umgebungsarbeiten', pos:'415', name:'Einfriedung Zaun Holz 180 cm', unit:'lfm', price:185, f:null }
+  // ═══════════════════════════════════════════
+  // BKP 4 – UMGEBUNG
+  // (Garten, Zufahrt, Einfriedung, Aussenbeleuchtung)
+  // ═══════════════════════════════════════════
+  { grp:'4', grpName:'Umgebung', shared:true, sub:'41', subName:'Terraingestaltung', pos:'411', name:'Gartenanlage inkl. Humusierung', unit:'m²', price:38, f:'parcelArea-footprint' },
+  { grp:'4', grpName:'Umgebung', shared:true, sub:'41', subName:'Terraingestaltung', pos:'412', name:'Rasensaat mit Mulcheinarbeitung', unit:'m²', price:20, f:'parcelArea-footprint' },
+  { grp:'4', grpName:'Umgebung', shared:true, sub:'41', subName:'Terraingestaltung', pos:'413', name:'Stützmauer Beton oder Stein', unit:'m²', price:480, f:null },
+  { grp:'4', grpName:'Umgebung', shared:true, sub:'42', subName:'Beläge und Zugänge', pos:'421', name:'Terrassenbelag Beton-/Naturstein', unit:'m²', price:195, f:'footprint*0.15' },
+  { grp:'4', grpName:'Umgebung', shared:true, sub:'42', subName:'Beläge und Zugänge', pos:'422', name:'Zufahrt/Abstellplätze Asphalt', unit:'m²', price:150, f:'fixed:30' },
+  { grp:'4', grpName:'Umgebung', shared:true, sub:'42', subName:'Beläge und Zugänge', pos:'423', name:'Kiesweg / Belagsweg 10 cm', unit:'m²', price:65, f:null },
+  { grp:'4', grpName:'Umgebung', shared:true, sub:'43', subName:'Einfriedung', pos:'431', name:'Zaun Metall/Holz 180 cm', unit:'lfm', price:195, f:null },
+  { grp:'4', grpName:'Umgebung', shared:true, sub:'43', subName:'Einfriedung', pos:'432', name:'Hecke einpflanzen inkl. Erden', unit:'lfm', price:85, f:null },
+  { grp:'4', grpName:'Umgebung', shared:true, sub:'44', subName:'Aussenbeleuchtung', pos:'441', name:'Aussenleuchten LED inkl. Kabel', unit:'Stk', price:680, f:'perimeter/20' }
 ];
 
 // ─── FORMULA ENGINE ───────────────────────────────────────────────────────
@@ -889,6 +931,118 @@ function selectPLZEntry(plz, name, kt) {
   if (rc) { rc.classList.add('sel'); S.region=kt; S.rf=rf; }
 }
 
+// ─── PARCEL MAP WITH SWISSTOPO ORTHOFOTO ───────────────────────────────────
+let _leafletMap = null;
+
+function showParcelMap(lat, lon, label) {
+  const wrap = document.getElementById('parcelMapWrap');
+  wrap.style.display = 'block';
+  // Small scroll to map
+  setTimeout(() => wrap.scrollIntoView({behavior:'smooth', block:'nearest'}), 200);
+
+  if (_leafletMap) {
+    _leafletMap.remove();
+    _leafletMap = null;
+  }
+
+  _leafletMap = L.map('parcelMap', { zoomControl:true, attributionControl:true });
+
+  // Swisstopo SWISSIMAGE Orthofoto (aktuellste Aufnahme)
+  L.tileLayer('https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.swissimage/default/current/3857/{z}/{x}/{y}.jpeg', {
+    attribution: '© <a href="https://swisstopo.ch">swisstopo</a>',
+    maxZoom: 20,
+    crossOrigin: true
+  }).addTo(_leafletMap);
+
+  // Swisstopo Kataster-Überlagerung (Parzellengrenzen)
+  L.tileLayer('https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.amtliches-kw.amtliche-karte_1000/default/current/3857/{z}/{x}/{y}.png', {
+    opacity: 0.35,
+    maxZoom: 20,
+    crossOrigin: true
+  }).addTo(_leafletMap);
+
+  _leafletMap.setView([lat, lon], 17);
+
+  // Custom pulsing marker
+  const icon = L.divIcon({
+    className: '',
+    html: `<div style="width:18px;height:18px;background:#e53935;border:3px solid white;border-radius:50%;box-shadow:0 0 0 4px rgba(229,57,53,0.3)"></div>`,
+    iconSize:[18,18], iconAnchor:[9,9]
+  });
+  L.marker([lat, lon], {icon}).addTo(_leafletMap)
+    .bindPopup(`<strong>${label}</strong>`)
+    .openPopup();
+}
+
+// ─── KBS LOOKUP ────────────────────────────────────────────────────────────
+async function checkKBS(lat, lon, resultEl) {
+  try {
+    const d = 0.012; // ~1km bbox
+    const url = `https://geodienste.ch/db/kataster_belasteter_standorte_v1_5_0/deu/ogcapi/collections/belastete_standorte_punkte/items?f=json&limit=5&bbox=${lon-d},${lat-d},${lon+d},${lat+d}`;
+    const r = await fetch(url);
+    if (!r.ok) return;
+    const data = await r.json();
+    const count = data.features ? data.features.length : 0;
+    if (count > 0) {
+      const sites = data.features.map(f => {
+        const p = f.properties || {};
+        return p.bezeichnung || p.name || p.kbs_nr || 'Standort';
+      }).slice(0,3);
+      resultEl.insertAdjacentHTML('beforeend', `
+        <div class="kbs-warning">
+          <div class="kbs-warning-icon">⚠️</div>
+          <div class="kbs-warning-body">
+            <div class="kbs-warning-title">Belasteter Standort in der Nähe (KBS)</div>
+            <div class="kbs-warning-detail">
+              Im Umkreis von 1 km wurden <strong>${count} belastete Standorte</strong> im kantonalen Kataster erfasst:<br>
+              ${sites.map(s=>`• ${s}`).join('<br>')}
+              <br><em style="color:#7b5e57">Abklärung beim Kanton empfohlen vor Baubeginn.</em>
+            </div>
+          </div>
+        </div>`);
+    }
+  } catch(e) { /* silent */ }
+}
+
+// Check for protected trees via Swisstopo (BAFU biodiversity layer)
+async function checkProtectedTrees(lat, lon, resultEl) {
+  try {
+    // Use Swisstopo identify API for nature protection objects
+    const x = lon, y = lat;
+    const url = `https://api3.geo.admin.ch/rest/services/ech/MapServer/identify?geometry=${x},${y}&geometryType=esriGeometryPoint&radius=100&layers=all:ch.bafu.bundesinventare-bln&tolerance=0&returnGeometry=false&sr=4326&lang=de`;
+    const r = await fetch(url);
+    if (!r.ok) return;
+    const data = await r.json();
+    const results = data.results || [];
+    if (results.length > 0) {
+      resultEl.insertAdjacentHTML('beforeend', `
+        <div class="kbs-warning" style="background:#e8f5e9;border-color:#2e7d32">
+          <div class="kbs-warning-icon">🌳</div>
+          <div class="kbs-warning-body">
+            <div class="kbs-warning-title" style="color:#1b5e20">Bundesinventar BLN in der Nähe</div>
+            <div class="kbs-warning-detail" style="color:#2e4a2e">
+              <strong>${results[0].properties?.obj_name || 'BLN-Objekt'}</strong> liegt in der Nähe.<br>
+              <em>Schutzauflagen für Bäume und Naturschutz prüfen.</em>
+            </div>
+          </div>
+        </div>`);
+    }
+  } catch(e) { /* silent */ }
+}
+
+
+async function getMunicipalityCoords(name, canton) {
+  try {
+    const r = await fetch('/api/geoportal', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({action:'municipality_lookup', params:{name: name + ' ' + canton}})
+    });
+    const d = await r.json();
+    if (d.found) return {lat: d.lat, lon: d.lon};
+  } catch(e) {}
+  return null;
+}
+
 // ─── PARCEL LOOKUP ────────────────────────────────────────────────────────
 async function lookupParcel() {
   const num = document.getElementById('pNum').value.trim();
@@ -921,9 +1075,12 @@ async function lookupParcel() {
         unload();
         // Got real data from geoportal!
         const area     = Math.round(data.area);
-        const maxFP    = Math.round(area * 0.30); // default coverage until zone lookup
+        const maxFP    = Math.round(area * 0.30);
         const recFloors = 2;
         const dim      = Math.round(Math.sqrt(maxFP / recFloors));
+        // Koordinaten für Karte — aus Gemeinde-Lookup
+        const munLat = data.lat || null;
+        const munLon = data.lon || null;
 
         out.innerHTML = `
           <div class="result-card" style="background:linear-gradient(135deg,#1565c0,#0d47a1)">
@@ -1038,6 +1195,14 @@ async function lookupParcel() {
         Daten übernehmen →
       </button>
     </div>`;
+  // Show map
+  getMunicipalityCoords(selectedPLZ[1], selectedPLZ[2]).then(coords => {
+    if (coords) {
+      showParcelMap(coords.lat, coords.lon, 'Parzelle ' + num + ' · ' + selectedPLZ[1]);
+      checkKBS(coords.lat, coords.lon, out);
+      checkProtectedTrees(coords.lat, coords.lon, out);
+    }
+  });
 }
 
 function applyParcel(p, floors, dim) {
