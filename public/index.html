@@ -165,7 +165,12 @@ button{font-family:'Inter',sans-serif;padding:0.65rem 1.25rem;border:none;border
       <div class="logo-sub">RESEARCH LAB</div>
     </div>
     <div class="nav-sec">
-      <div class="nav-sec-title">Projekt</div>
+      <div class="nav-sec-title">Projekte</div>
+      <div class="nav-item" id="nav-projects" onclick="goTo('projects')" style="font-weight:600">
+        <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20"><path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg>
+        Alle Projekte
+      </div>
+      <div class="nav-sec-title" style="margin-top:1rem">Aktuell</div>
       <div class="nav-item active" id="nav-project" onclick="goTo('project')">
         <svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20"><path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2H3V4zM3 9h14v7a1 1 0 01-1 1H4a1 1 0 01-1-1V9z"/></svg>
         Projektdaten
@@ -385,9 +390,35 @@ button{font-family:'Inter',sans-serif;padding:0.65rem 1.25rem;border:none;border
       <div class="cost-box" id="costBox"></div>
       <div class="btn-group">
         <button class="btn-white" onclick="goTo('bkp')">← Zurück</button>
+        <button class="btn-red" onclick="saveProject()" style="background:#2e7d32">💾 Projekt speichern</button>
         <button class="btn-green" onclick="exportPDF()">📄 PDF exportieren</button>
         <button class="btn-red" onclick="sendFOROL()">🚀 An FOROL Futur</button>
       </div>
+    </div>
+
+    <!-- PAGE: PROJEKTE -->
+    <div class="page" id="page-projects">
+      <div class="header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem">
+        <div>
+          <h1>Gespeicherte Projekte</h1>
+          <p>Alle Berechnungen lokal gespeichert — jederzeit wieder öffnen</p>
+        </div>
+        <div style="display:flex;gap:0.75rem;flex-wrap:wrap">
+          <button class="btn-white" onclick="exportProjectsBackup()" style="font-size:0.85rem">⬇ Backup</button>
+          <label class="btn-white" style="cursor:pointer;font-size:0.85rem;padding:0.65rem 1.25rem;border:1px solid var(--br);border-radius:6px;font-weight:600">
+            ⬆ Importieren
+            <input type="file" accept=".json" onchange="importProjectsBackup(this)" style="display:none">
+          </label>
+          <button class="btn-red" onclick="newProject()">+ Neues Projekt</button>
+        </div>
+      </div>
+      <div style="margin-bottom:1.5rem">
+        <input id="projectSearchInput" placeholder="🔍 Projekt suchen (Name, Bauherr, Ort, Nummer)…"
+          oninput="renderProjectsList()"
+          style="width:100%;padding:0.75rem 1rem;border:1px solid var(--br);border-radius:8px;font-size:0.95rem;background:white;box-shadow:0 1px 3px rgba(0,0,0,0.06)">
+      </div>
+      <div id="projectsStats" style="display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;margin-bottom:1.5rem"></div>
+      <div id="projectsList"></div>
     </div>
 
     <!-- PAGE: ERDMASSEN -->
@@ -2113,6 +2144,7 @@ function goTo(page) {
   if (page==='bkp')         buildBKP();
   if (page==='summary')     buildSummary();
   if (page==='excavation')  initExcavation();
+  if (page==='projects')    { renderProjectsList(); updateProjectCount(); }
   if (page==='utilization') initUtilization();
   if (page==='prices')      renderPriceEditor();
 }
@@ -2515,6 +2547,337 @@ function resetPrices() {
   renderPriceEditor();
 }
 
+// ─── PROJECT MANAGEMENT ──────────────────────────────────────────────────
+const DB_KEY = 'forol_projects_v1';
+
+// Load all projects from localStorage
+function loadProjects() {
+  try {
+    return JSON.parse(localStorage.getItem(DB_KEY) || '[]');
+  } catch { return []; }
+}
+
+// Save projects array to localStorage
+function persistProjects(projects) {
+  localStorage.setItem(DB_KEY, JSON.stringify(projects));
+}
+
+// Save current project state
+function saveProject() {
+  saveCurFromForm();
+
+  const name    = document.getElementById('projName').value.trim();
+  const client  = document.getElementById('projClient').value.trim();
+  const loc     = document.getElementById('projLocation').value.trim();
+  const num     = document.getElementById('projNum').value.trim();
+
+  if (!name) {
+    alert('⚠️ Bitte zuerst einen Projektnamen eingeben (Projektdaten → Grunddaten).');
+    goTo('project');
+    return;
+  }
+
+  // Calculate totals
+  let g1=0,g2=0,g3=0,g4=0;
+  S.bkpItems.forEach(x=>{
+    if(x.grp==='1')g1+=x.total;
+    else if(x.grp==='2')g2+=x.total;
+    else if(x.grp==='3')g3+=x.total;
+    else if(x.grp==='4')g4+=x.total;
+  });
+  const sub   = g1+g2+g3+g4;
+  const total = sub*1.22;
+
+  let totalFP=0,totalGFA=0;
+  S.buildings.forEach(b=>{ const f=b.len*b.wid; totalFP+=f; totalGFA+=f*b.floors; });
+
+  const projects = loadProjects();
+
+  // Check if project with same name exists → offer update
+  const existingIdx = projects.findIndex(p => p.name === name);
+
+  const snapshot = {
+    id:          existingIdx >= 0 ? projects[existingIdx].id : 'PRJ-' + Date.now(),
+    name,
+    number:      num,
+    client,
+    location:    loc,
+    region:      S.region,
+    rf:          S.rf,
+    savedAt:     new Date().toISOString(),
+    status:      'Kalkulation',
+    totalCHF:    total,
+    subtotalCHF: sub,
+    buildings:   JSON.parse(JSON.stringify(S.buildings)),
+    bkpItems:    JSON.parse(JSON.stringify(S.bkpItems)),
+    parcelArea:  +document.getElementById('parcelArea').value || 0,
+    projType:    document.getElementById('projType')?.value || 'new',
+    projFinish:  document.getElementById('projFinish')?.value || 'std',
+    metrics: {
+      footprint:       totalFP,
+      gfa:             totalGFA,
+      costPerSqm:      totalGFA > 0 ? Math.round(total/totalGFA) : null,
+      numBuildings:    S.buildings.length,
+      numBkpItems:     S.bkpItems.filter(x=>x.qty>0).length,
+      bkp1: g1, bkp2: g2, bkp3: g3, bkp4: g4
+    },
+    aiUsed:   AI.source !== null,
+    aiSource: AI.source
+  };
+
+  if (existingIdx >= 0) {
+    if (!confirm(`Projekt "${name}" bereits vorhanden.\n\nJetzt überschreiben?`)) return;
+    projects[existingIdx] = snapshot;
+  } else {
+    projects.unshift(snapshot); // newest first
+  }
+
+  persistProjects(projects);
+
+  // Show success
+  const saved = document.createElement('div');
+  saved.style.cssText = 'position:fixed;top:1.5rem;right:1.5rem;background:#2e7d32;color:white;padding:1rem 1.5rem;border-radius:8px;font-weight:600;font-size:0.9rem;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,0.2);animation:fadeIn 0.3s ease';
+  saved.innerHTML = `✅ Projekt gespeichert<br><span style="font-weight:400;font-size:0.8rem">${name} · CHF ${chf(total)}</span>`;
+  document.body.appendChild(saved);
+  setTimeout(() => saved.remove(), 3000);
+}
+
+// Load a project back into app state
+function loadProject(id) {
+  const projects = loadProjects();
+  const p = projects.find(x => x.id === id);
+  if (!p) return;
+
+  // Restore state
+  S.buildings  = JSON.parse(JSON.stringify(p.buildings));
+  S.bkpItems   = JSON.parse(JSON.stringify(p.bkpItems));
+  S.region     = p.region;
+  S.rf         = p.rf;
+  S.cur        = S.buildings[0]?.id || 1;
+
+  // Restore form fields
+  document.getElementById('projName').value     = p.name     || '';
+  document.getElementById('projNum').value      = p.number   || '';
+  document.getElementById('projClient').value   = p.client   || '';
+  document.getElementById('projLocation').value = p.location || '';
+  document.getElementById('parcelArea').value   = p.parcelArea || '';
+  if (document.getElementById('projType'))   document.getElementById('projType').value   = p.projType   || 'new';
+  if (document.getElementById('projFinish')) document.getElementById('projFinish').value = p.projFinish || 'std';
+
+  // Restore region card highlight
+  document.querySelectorAll('.rcard').forEach(c => c.classList.remove('sel'));
+  const rc = document.querySelector(`.rcard[data-r="${p.region}"]`);
+  if (rc) rc.classList.add('sel');
+
+  goTo('summary');
+}
+
+// Delete a project
+function deleteProject(id, name) {
+  if (!confirm(`Projekt "${name}" wirklich löschen?\n\nDiese Aktion kann nicht rückgängig gemacht werden.`)) return;
+  const projects = loadProjects().filter(p => p.id !== id);
+  persistProjects(projects);
+  renderProjectsList();
+}
+
+// Duplicate a project
+function duplicateProject(id) {
+  const projects = loadProjects();
+  const p = projects.find(x => x.id === id);
+  if (!p) return;
+  const copy = JSON.parse(JSON.stringify(p));
+  copy.id      = 'PRJ-' + Date.now();
+  copy.name    = p.name + ' (Kopie)';
+  copy.savedAt = new Date().toISOString();
+  projects.unshift(copy);
+  persistProjects(projects);
+  renderProjectsList();
+}
+
+// Start a brand new project
+function newProject() {
+  if (!confirm('Aktuellen Stand verwerfen und neues Projekt starten?')) return;
+  S.buildings = [freshBuilding(1)];
+  S.bkpItems  = [];
+  S.cur       = 1;
+  S.region    = 'TG';
+  S.rf        = 1.00;
+  AI.source   = null;
+  ['projName','projNum','projClient','projLocation','parcelArea'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  document.querySelectorAll('.rcard').forEach(c => c.classList.remove('sel'));
+  const tg = document.querySelector('.rcard[data-r="TG"]');
+  if (tg) tg.classList.add('sel');
+  goTo('project');
+}
+
+// Render the projects list page
+function renderProjectsList() {
+  const projects = loadProjects();
+  const query    = (document.getElementById('projectSearchInput')?.value || '').toLowerCase();
+  const statsEl  = document.getElementById('projectsStats');
+  const listEl   = document.getElementById('projectsList');
+  if (!statsEl || !listEl) return;
+
+  // Stats
+  const totalCHF = projects.reduce((s,p) => s + (p.totalCHF||0), 0);
+  statsEl.innerHTML = [
+    ['Projekte gesamt', projects.length, '#d32f2f'],
+    ['Total Bausumme', 'CHF ' + chf(totalCHF), '#2196f3'],
+    ['Gebäude total', projects.reduce((s,p) => s + (p.metrics?.numBuildings||1), 0), '#4caf50'],
+    ['KI-Analysen', projects.filter(p=>p.aiUsed).length, '#9c27b0'],
+  ].map(([l,v,col]) => `
+    <div style="background:white;border-radius:8px;padding:1.25rem;box-shadow:0 1px 3px rgba(0,0,0,0.08);text-align:center">
+      <div style="font-size:0.72rem;color:var(--gt);text-transform:uppercase;margin-bottom:0.25rem">${l}</div>
+      <div style="font-size:1.4rem;font-weight:700;color:${col}">${v}</div>
+    </div>`).join('');
+
+  // Filter
+  const filtered = query
+    ? projects.filter(p =>
+        (p.name||'').toLowerCase().includes(query) ||
+        (p.client||'').toLowerCase().includes(query) ||
+        (p.location||'').toLowerCase().includes(query) ||
+        (p.number||'').toLowerCase().includes(query))
+    : projects;
+
+  if (filtered.length === 0) {
+    listEl.innerHTML = `
+      <div style="text-align:center;padding:4rem;background:white;border-radius:8px;color:var(--gt)">
+        ${projects.length === 0
+          ? '<div style="font-size:3rem;margin-bottom:1rem">📁</div><h3>Noch keine Projekte gespeichert</h3><p style="margin-top:0.5rem">Erstelle eine Kalkulation und klicke auf "💾 Projekt speichern"</p>'
+          : '<div style="font-size:2rem;margin-bottom:0.5rem">🔍</div><p>Keine Projekte für "' + query + '" gefunden</p>'
+        }
+      </div>`;
+    return;
+  }
+
+  const TYPE_LABELS  = { new:'Neubau', ren:'Umbau', ext:'Erweiterung' };
+  const STATUS_COLOR = { 'Kalkulation':'#2196f3', 'Angebot':'#ff9800', 'Abgeschlossen':'#4caf50' };
+
+  listEl.innerHTML = filtered.map(p => {
+    const date     = new Date(p.savedAt).toLocaleDateString('de-CH');
+    const time     = new Date(p.savedAt).toLocaleTimeString('de-CH', {hour:'2-digit',minute:'2-digit'});
+    const statusC  = STATUS_COLOR[p.status] || '#666';
+    const nb       = p.metrics?.numBuildings || 1;
+    const gfa      = p.metrics?.gfa || 0;
+    const cpsm     = p.metrics?.costPerSqm;
+
+    return `
+    <div style="background:white;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.08);margin-bottom:1rem;overflow:hidden;border:1px solid var(--br);transition:box-shadow 0.2s"
+         onmouseenter="this.style.boxShadow='0 4px 16px rgba(0,0,0,0.12)'"
+         onmouseleave="this.style.boxShadow='0 1px 3px rgba(0,0,0,0.08)'">
+
+      <!-- Header -->
+      <div style="padding:1.25rem 1.5rem;display:flex;justify-content:space-between;align-items:flex-start;border-bottom:1px solid var(--br)">
+        <div style="flex:1">
+          <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.25rem">
+            <span style="font-size:1.1rem;font-weight:700">${p.name}</span>
+            ${p.number ? `<span style="font-size:0.75rem;color:var(--gt);background:var(--bg);padding:0.2rem 0.5rem;border-radius:4px">${p.number}</span>` : ''}
+            <span style="font-size:0.7rem;font-weight:600;padding:0.2rem 0.6rem;border-radius:10px;background:${statusC}22;color:${statusC}">${p.status||'Kalkulation'}</span>
+            ${p.aiUsed ? '<span style="font-size:0.7rem;font-weight:600;padding:0.2rem 0.6rem;border-radius:10px;background:#f3e5f5;color:#9c27b0">🤖 KI</span>' : ''}
+          </div>
+          <div style="font-size:0.85rem;color:var(--gt)">
+            ${p.client ? `<span>${p.client}</span> · ` : ''}
+            <span>${p.location || '–'}</span> ·
+            <span>${p.region}</span> ·
+            <span>${TYPE_LABELS[p.projType] || 'Neubau'}</span>
+          </div>
+        </div>
+        <div style="text-align:right;flex-shrink:0;margin-left:1rem">
+          <div style="font-size:1.3rem;font-weight:700;color:var(--red)">CHF ${chf(p.totalCHF)}</div>
+          ${cpsm ? `<div style="font-size:0.78rem;color:var(--gt)">CHF ${cpsm.toLocaleString('de-CH')}/m²</div>` : ''}
+        </div>
+      </div>
+
+      <!-- Metrics row -->
+      <div style="padding:0.75rem 1.5rem;display:grid;grid-template-columns:repeat(5,1fr);gap:1rem;background:#fafafa">
+        ${[
+          ['Gebäude', nb],
+          ['GFA', gfa > 0 ? gfa.toFixed(0)+' m²' : '–'],
+          ['BKP 2', p.metrics?.bkp2 > 0 ? 'CHF '+chf(p.metrics.bkp2) : '–'],
+          ['Positionen', p.metrics?.numBkpItems || '–'],
+          ['Gespeichert', date+' '+time]
+        ].map(([l,v]) => `
+          <div>
+            <div style="font-size:0.7rem;color:var(--gt);text-transform:uppercase">${l}</div>
+            <div style="font-size:0.85rem;font-weight:600;margin-top:0.1rem">${v}</div>
+          </div>`).join('')}
+      </div>
+
+      <!-- Actions -->
+      <div style="padding:0.75rem 1.5rem;display:flex;gap:0.5rem;border-top:1px solid var(--br)">
+        <button onclick="loadProject('${p.id}')" 
+          style="flex:1;padding:0.6rem;background:var(--red);color:white;border:none;border-radius:6px;font-weight:600;font-size:0.85rem;cursor:pointer">
+          📂 Öffnen
+        </button>
+        <button onclick="duplicateProject('${p.id}')"
+          style="padding:0.6rem 1rem;background:white;color:var(--dk);border:1px solid var(--br);border-radius:6px;font-size:0.85rem;cursor:pointer">
+          📋 Kopieren
+        </button>
+        <button onclick="changeStatus('${p.id}')"
+          style="padding:0.6rem 1rem;background:white;color:var(--dk);border:1px solid var(--br);border-radius:6px;font-size:0.85rem;cursor:pointer">
+          🏷 Status
+        </button>
+        <button onclick="deleteProject('${p.id}', '${p.name.replace(/'/g,"\\'")}' )"
+          style="padding:0.6rem 1rem;background:white;color:var(--red);border:1px solid #ffcdd2;border-radius:6px;font-size:0.85rem;cursor:pointer">
+          🗑 Löschen
+        </button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// Change project status
+function changeStatus(id) {
+  const statuses = ['Kalkulation', 'Angebot', 'Abgeschlossen'];
+  const projects = loadProjects();
+  const p = projects.find(x => x.id === id);
+  if (!p) return;
+  const cur = statuses.indexOf(p.status || 'Kalkulation');
+  const next = statuses[(cur+1) % statuses.length];
+  p.status = next;
+  persistProjects(projects);
+  renderProjectsList();
+}
+
+// Export all projects as JSON backup
+function exportProjectsBackup() {
+  const projects = loadProjects();
+  const blob = new Blob([JSON.stringify(projects, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `FOROL_Projekte_Backup_${new Date().toISOString().split('T')[0]}.json`;
+  a.click();
+}
+
+// Import projects from JSON backup
+function importProjectsBackup(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const imported = JSON.parse(e.target.result);
+      if (!Array.isArray(imported)) throw new Error('Ungültiges Format');
+      const existing = loadProjects();
+      const existingIds = new Set(existing.map(p => p.id));
+      let newCount = 0;
+      imported.forEach(p => {
+        if (!existingIds.has(p.id)) { existing.push(p); newCount++; }
+      });
+      persistProjects(existing);
+      renderProjectsList();
+      alert(`✅ ${newCount} neue Projekte importiert.`);
+    } catch(e) {
+      alert('⚠️ Fehler beim Importieren: ' + e.message);
+    }
+  };
+  reader.readAsText(file);
+}
+
 // ─── HELPERS ──────────────────────────────────────────────────────────────
 function chf(n) { return (+n||0).toLocaleString('de-CH',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function loading(msg) { document.getElementById('loader-msg').textContent=msg; document.getElementById('loader').classList.add('on'); }
@@ -2525,7 +2888,19 @@ function delay(ms) { return new Promise(r=>setTimeout(r,ms)); }
 window.addEventListener('DOMContentLoaded',()=>{
   renderBuildingTabs();
   renderDevOverview();
+  updateProjectCount();
 });
+
+function updateProjectCount() {
+  const n = loadProjects().length;
+  const el = document.getElementById('nav-projects');
+  if (!el) return;
+  const badge = el.querySelector('.proj-count');
+  if (n > 0) {
+    if (badge) badge.textContent = n;
+    else el.innerHTML += ` <span class="proj-count" style="background:var(--red);color:white;border-radius:10px;padding:0.1rem 0.5rem;font-size:0.7rem;font-weight:700;margin-left:auto">${n}</span>`;
+  }
+}
 </script>
 </body>
 </html>
