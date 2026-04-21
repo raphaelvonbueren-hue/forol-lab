@@ -1328,28 +1328,26 @@ function _extractHouseNum(s) {
 }
 
 // Relevanz-Score für einen API-Treffer
-// Höher = besserer Match
+// Höher = besserer Match. Negativer Score = klarer Mismatch.
 function _scoreMatch(attrs, inputStreet, inputCity) {
   const label = _normalize((attrs.label || '').replace(/<[^>]*>/g, ''));
   const streetName = _extractStreetName(inputStreet);
   const houseNum = _extractHouseNum(inputStreet);
   const city = _normalize(inputCity);
+
+  // HARTE REGEL: Wenn User eine Strasse eingegeben hat und der Strassenname
+  // ist NICHT im Label enthalten → negatives Ergebnis, andere Boni ignorieren.
+  // Das verhindert dass Hausnr+Stadt alleine einen Falsch-Treffer dominieren.
+  if (streetName && !label.includes(streetName)) {
+    return -100;
+  }
+
   let score = 0;
-
-  // Strassenname muss im Label enthalten sein (wichtigster Check!)
   if (streetName && label.includes(streetName)) score += 100;
-  else if (streetName) score -= 50; // Strasse gesucht aber nicht im Label → schlecht
-
-  // Hausnummer: exakt oder fuzzy
   if (houseNum && label.includes(' ' + houseNum + ' ')) score += 30;
   else if (houseNum && label.includes(' ' + houseNum)) score += 20;
-
-  // Stadt/PLZ im Label
   if (city && label.includes(city)) score += 40;
-
-  // Address-Treffer bevorzugen über Street-Treffer
   if (attrs.origin === 'address') score += 10;
-
   return score;
 }
 
