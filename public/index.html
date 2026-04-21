@@ -1227,12 +1227,27 @@ function onAddrInput() {
 async function fetchAddressSuggestions(query) {
   try {
     const url = `https://api3.geo.admin.ch/rest/services/ech/SearchServer` +
-      `?searchText=${encodeURIComponent(query)}&type=locations&origins=address,street&sr=4326&lang=de&limit=8`;
+      `?searchText=${encodeURIComponent(query)}&type=locations&origins=address,street&sr=4326&lang=de&limit=10`;
     const r = await fetch(url);
     if (!r.ok) { hideSuggestions(); return; }
     const data = await r.json();
-    const results = (data.results || []).filter(x => x.attrs?.lat && x.attrs?.lon);
-    showSuggestions(results);
+    let results = (data.results || []).filter(x => x.attrs?.lat && x.attrs?.lon);
+
+    // Relevanz-Scoring: Strassen + Stadt aus den 2 Feldern
+    const street = (document.getElementById('addrStreet')?.value || '').trim();
+    const city = (document.getElementById('addrCity')?.value || '').trim();
+    if (street || city) {
+      results.forEach(r => { r._score = _scoreMatch(r.attrs, street, city); });
+      results.sort((a, b) => b._score - a._score);
+      // Filter: bei negativem Score (Strasse gar nicht gematched) entfernen
+      // aber nur wenn der Benutzer eine Strasse eingegeben hat UND wir noch etwas Besseres haben
+      const streetName = _extractStreetName(street);
+      if (streetName) {
+        const matching = results.filter(r => r._score > 0);
+        if (matching.length > 0) results = matching;
+      }
+    }
+    showSuggestions(results.slice(0, 6));
   } catch(e) { hideSuggestions(); }
 }
 
@@ -1292,6 +1307,52 @@ function selectAddressSuggestion(lat, lon, label) {
   if (envDiv) envDiv.innerHTML = '';
 }
 
+// Normalisiert einen String für Vergleiche: klein, ohne Umlaute, ohne Punkt/Komma
+function _normalize(s) {
+  return (s || '').toLowerCase()
+    .replace(/[äàáâã]/g,'a').replace(/[öòóôõ]/g,'o').replace(/[üùúû]/g,'u').replace(/ß/g,'ss').replace(/é/g,'e').replace(/è/g,'e').replace(/ê/g,'e')
+    .replace(/[.,]/g, '')
+    .replace(/\s+/g,' ')
+    .trim();
+}
+
+// Extrahiert nur den Strassennamen (ohne Hausnummer) aus "Hauptstrasse 12"
+function _extractStreetName(s) {
+  return _normalize(s).replace(/\s+\d+[a-z]?(\.\d+)?\s*$/i, '').trim();
+}
+
+// Extrahiert die Hausnummer aus "Hauptstrasse 12"
+function _extractHouseNum(s) {
+  const m = (s || '').match(/\s+(\d+[a-z]?(?:\.\d+)?)\s*$/i);
+  return m ? m[1].toLowerCase() : '';
+}
+
+// Relevanz-Score für einen API-Treffer
+// Höher = besserer Match
+function _scoreMatch(attrs, inputStreet, inputCity) {
+  const label = _normalize((attrs.label || '').replace(/<[^>]*>/g, ''));
+  const streetName = _extractStreetName(inputStreet);
+  const houseNum = _extractHouseNum(inputStreet);
+  const city = _normalize(inputCity);
+  let score = 0;
+
+  // Strassenname muss im Label enthalten sein (wichtigster Check!)
+  if (streetName && label.includes(streetName)) score += 100;
+  else if (streetName) score -= 50; // Strasse gesucht aber nicht im Label → schlecht
+
+  // Hausnummer: exakt oder fuzzy
+  if (houseNum && label.includes(' ' + houseNum + ' ')) score += 30;
+  else if (houseNum && label.includes(' ' + houseNum)) score += 20;
+
+  // Stadt/PLZ im Label
+  if (city && label.includes(city)) score += 40;
+
+  // Address-Treffer bevorzugen über Street-Treffer
+  if (attrs.origin === 'address') score += 10;
+
+  return score;
+}
+
 async function searchAddress() {
   const street = (document.getElementById('addrStreet')?.value || '').trim();
   const city = (document.getElementById('addrCity')?.value || '').trim();
@@ -1302,18 +1363,21 @@ async function searchAddress() {
   if (addrResult) addrResult.innerHTML =
     `<div style="color:var(--gt);font-size:0.85rem;padding:0.5rem 0">⏳ Suche läuft…</div>`;
 
-  // Query-Varianten probieren (von spezifisch zu allgemein)
+  // Mehrere Query-Varianten (spezifisch → allgemein)
   const queries = [];
   if (street && city) {
     queries.push(`${street}, ${city}`);
     queries.push(`${street} ${city}`);
   }
   if (street) queries.push(street);
-  if (city) queries.push(city);
+  if (city && !street) queries.push(city);
+
+  const streetName = _extractStreetName(street);
 
   try {
-    let hit = null;
+    let allResults = [];
 
+    // Sammle Treffer aus allen Query-Varianten
     for (const q of queries) {
       const url = `https://api3.geo.admin.ch/rest/services/ech/SearchServer` +
         `?searchText=${encodeURIComponent(q)}&type=locations&origins=address,street&sr=4326&lang=de&limit=10`;
@@ -1321,40 +1385,81 @@ async function searchAddress() {
       if (!r.ok) continue;
       const data = await r.json();
       const results = (data.results || []).filter(x => x.attrs?.lat && x.attrs?.lon);
-      if (!results.length) continue;
-
-      // Wenn city angegeben: bevorzuge Treffer deren Label die city enthält
-      if (city && results.length > 1) {
-        const cityLower = city.toLowerCase();
-        hit = results.find(rr => (rr.attrs.label || '').toLowerCase().includes(cityLower))?.attrs
-           || results[0].attrs;
-      } else {
-        hit = results[0].attrs;
+      allResults = allResults.concat(results);
+      // Falls erste Query direkt viele gute Treffer liefert → reicht
+      if (results.length >= 3 && streetName &&
+          results.some(r => _normalize((r.attrs.label||'').replace(/<[^>]*>/g,'')).includes(streetName))) {
+        break;
       }
-      if (hit) break;
     }
 
-    // Fallback: breitere Origins
-    if (!hit) {
-      const q = queries[0] || (street || city);
+    // Dedupe by label
+    const seen = new Set();
+    allResults = allResults.filter(r => {
+      const key = (r.attrs?.label || '').replace(/<[^>]*>/g,'');
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    // Score + sort
+    allResults.forEach(r => { r._score = _scoreMatch(r.attrs, street, city); });
+    allResults.sort((a, b) => b._score - a._score);
+
+    const topHit = allResults[0];
+    const streetMatches = topHit && streetName ?
+      _normalize((topHit.attrs.label||'').replace(/<[^>]*>/g,'')).includes(streetName) : true;
+
+    if (!topHit) {
+      // Gar nichts gefunden — Fallback mit breiteren Origins
       const url2 = `https://api3.geo.admin.ch/rest/services/ech/SearchServer` +
-        `?searchText=${encodeURIComponent(q)}&type=locations&origins=address,street,zipcode,gg25&sr=4326&lang=de&limit=10`;
+        `?searchText=${encodeURIComponent(queries[0] || street || city)}&type=locations&origins=address,street,zipcode,gg25&sr=4326&lang=de&limit=10`;
       const r2 = await fetch(url2);
       if (r2.ok) {
         const d2 = await r2.json();
-        hit = (d2.results || []).find(x => x.attrs?.lat && x.attrs?.lon)?.attrs;
+        const hit2 = (d2.results || []).find(x => x.attrs?.lat && x.attrs?.lon)?.attrs;
+        if (hit2) {
+          if (addrResult) addrResult.innerHTML = '';
+          selectAddressSuggestion(hit2.lat, hit2.lon, (hit2.label || '').replace(/<[^>]*>/g,''));
+          return;
+        }
       }
-    }
-
-    if (!hit) {
       if (addrResult) addrResult.innerHTML =
-        `<div class="alert alert-info" style="margin-top:0.5rem">Adresse nicht gefunden. Prüfen Sie die Schreibweise oder geben Sie nur PLZ + Ort ein.</div>`;
+        `<div class="alert alert-info" style="margin-top:0.5rem">Adresse nicht gefunden. Tipp: Nutze die Vorschläge beim Tippen oder klicke direkt auf die Karte.</div>`;
       return;
     }
 
-    const label = (hit.label || '').replace(/<[^>]*>/g, '');
+    // Wenn gesuchte Strasse NICHT im Top-Treffer: alternative Vorschläge zeigen
+    if (streetName && !streetMatches) {
+      const suggestions = allResults.slice(0, 6);
+      if (addrResult) addrResult.innerHTML =
+        `<div class="alert alert-info" style="margin-top:0.5rem;font-size:0.85rem">
+          <strong>"${street}" nicht gefunden in ${city || 'diesem Ort'}.</strong><br>
+          ${suggestions.length ? 'Meintest du eine dieser Adressen?' : 'Bitte prüfe die Schreibweise.'}
+        </div>`;
+      if (suggestions.length) {
+        // Zeige Vorschläge wie Autocomplete
+        const box = document.getElementById('addrSuggestions');
+        if (box) {
+          box.style.display = 'block';
+          box.innerHTML = suggestions.map(r => {
+            const a = r.attrs || {};
+            const label = (a.label || '').replace(/<[^>]*>/g, '');
+            const safeLabel = label.replace(/'/g, "\\'");
+            return `<div class="addr-suggestion" onclick="selectAddressSuggestion(${a.lat},${a.lon},'${safeLabel}')">
+              <span class="addr-suggestion-icon">${a.origin === 'address' ? '🏠' : '🛣️'}</span>
+              <div><div class="addr-suggestion-main">${label}</div></div>
+            </div>`;
+          }).join('');
+        }
+      }
+      return;
+    }
+
+    // Guter Treffer — übernehmen
     if (addrResult) addrResult.innerHTML = '';
-    selectAddressSuggestion(hit.lat, hit.lon, label);
+    selectAddressSuggestion(topHit.attrs.lat, topHit.attrs.lon,
+      (topHit.attrs.label || '').replace(/<[^>]*>/g,''));
   } catch(e) {
     if (addrResult) addrResult.innerHTML =
       `<div class="alert alert-info" style="margin-top:0.5rem">Fehler bei der Suche: ${e.message}</div>`;
