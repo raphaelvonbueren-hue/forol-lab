@@ -1391,79 +1391,112 @@ function showParcelMap(lat, lon, label, zoom) {
 
 // Identify parcel at clicked coordinates via Swisstopo
 async function identifyParcelAtClick(lat, lon) {
-  // Show loading indicator on map
   const badge = document.getElementById('mapBadge');
   if (badge) badge.textContent = '⏳ Parzelle wird ermittelt…';
 
   try {
-    // 1. Reverse geocode — get address at point
+    // 1. Adresse
     const geoUrl = `https://api3.geo.admin.ch/rest/services/ech/SearchServer?searchText=${lon},${lat}&type=locations&origins=address&sr=4326&lang=de&limit=1`;
     const geoR = await fetch(geoUrl);
     const geoData = await geoR.json();
     const addrHit = geoData.results?.[0]?.attrs;
 
-    // 2. Elevation
+    // 2. Höhe Zentrum
     const elevR = await fetch(`/api/geoportal`, {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({action:'elevation', params:{lat, lon}})
     });
     const elevData = await elevR.json();
 
-    // 3. Municipality at click point
-    const munUrl = `https://api3.geo.admin.ch/rest/services/ech/SearchServer?searchText=${lat},${lon}&type=locations&origins=gg25&sr=4326&lang=de&limit=1`;
-    // Use reverse lookup via parcel identify
-    // Use confirmed Swisstopo identify layer for parcels
+    // 3. Parzelle identifizieren MIT GEOMETRIE
     const identUrl = `https://api3.geo.admin.ch/rest/services/ech/MapServer/identify` +
       `?geometry=${lon},${lat}&geometryType=esriGeometryPoint&imageDisplay=500,500,96` +
       `&mapExtent=${lon-0.005},${lat-0.005},${lon+0.005},${lat+0.005}` +
-      `&tolerance=5&layers=all:ch.swisstopo-vd.amtliche-vermessung&sr=4326&lang=de&returnGeometry=false`;
+      `&tolerance=5&layers=all:ch.swisstopo-vd.amtliche-vermessung&sr=4326&lang=de&returnGeometry=true`;
     const identR = await fetch(identUrl);
     const identData = await identR.json();
     const parcelHit = identData.results?.[0];
 
-    // Build result panel
     const addrStr = addrHit
       ? (addrHit.label||'').replace(/<[^>]*>/g,'')
       : `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
-    // Swisstopo AV identify returns various property names
     const props = parcelHit?.properties || parcelHit?.attributes || {};
     const parcelNum = props.egrid || props.EGRID || props.number || props.grundstuecknummer || null;
     const parcelArea = props.area || props.flaeche || props.flaecheninhalt || null;
     const municipality = props.gemname || props.gemeindename || props.municipality || props.Gemeindename || null;
+    const parcelGeometry = parcelHit?.geometry || null;
 
-    // Update badge
-    if (badge) badge.textContent = '🛰️ Swisstopo Orthofoto · Klicken Sie auf eine Parzelle';
+    // 4. Gefälle innerhalb Parzelle: min/max Höhe
+    let slopeInfo = null;
+    if (parcelGeometry && parcelGeometry.rings) {
+      slopeInfo = await calcParcelSlope(parcelGeometry.rings[0]);
+    }
 
-    // Show click result panel
+    // 5. KBS nur wenn DIREKT auf Parzelle
+    const kbsInfo = parcelGeometry
+      ? await checkKBSOnParcel(parcelGeometry)
+      : null;
+
+    if (badge) badge.textContent = '🛰️ Swisstopo · Tippen für Parzelle';
+
     const envDiv = document.getElementById('mapEnvWarnings');
     if (envDiv) {
+      // Slope text
+      let slopeHTML = '';
+      if (slopeInfo) {
+        const grad = slopeInfo.slopePercent;
+        const cls = grad < 5 ? '' : grad < 15 ? 'moderate' : 'steep';
+        slopeHTML = `<div>📈 <strong>Gefälle</strong><br>${grad.toFixed(1)}% · Δ ${slopeInfo.diff.toFixed(1)} m</div>`;
+      }
+
+      // KBS nur bei Treffer
+      let kbsHTML = '';
+      if (kbsInfo && kbsInfo.hit) {
+        kbsHTML = `
+          <div class="kbs-warning" style="margin-top:0.75rem">
+            <div class="kbs-warning-icon">⚠️</div>
+            <div class="kbs-warning-body">
+              <div class="kbs-warning-title">Belastetes Grundstück (KBS)</div>
+              <div class="kbs-warning-detail">
+                Diese Parzelle ist im Kataster der belasteten Standorte eingetragen:<br>
+                <strong>${kbsInfo.bezeichnung}</strong><br>
+                <em style="color:#7b5e57">Abklärung beim Kanton vor Baubeginn erforderlich.</em>
+              </div>
+            </div>
+          </div>`;
+      }
+
+      // Selection state for multi-parcel
+      const isSelected = window._selectedParcels?.some(p => p.egrid === parcelNum);
+
       envDiv.innerHTML = `
         <div class="parcel-click-panel" style="display:block">
-          <div class="parcel-click-title">📌 Angeklickte Position</div>
+          <div class="parcel-click-title">📌 Parzelle ${parcelNum || ''}</div>
           <div class="parcel-click-info">
-            <div style="margin-bottom:0.5rem">
-              <strong>${addrStr}</strong>
-            </div>
+            <div style="margin-bottom:0.5rem"><strong>${addrStr}</strong></div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.4rem 1rem;font-size:0.82rem">
-              <div>📍 <strong>Koordinaten</strong><br>${lat.toFixed(5)}° N, ${lon.toFixed(5)}° E</div>
+              <div>📍 <strong>Koordinaten</strong><br>${lat.toFixed(5)}°N ${lon.toFixed(5)}°E</div>
               <div>⛰️ <strong>Höhe</strong><br>${elevData.elevation ? elevData.elevation + ' m.ü.M.' : '–'}</div>
-              ${parcelNum ? `<div>📋 <strong>EGRID / Parzelle</strong><br>${parcelNum}</div>` : ''}
               ${parcelArea ? `<div>📐 <strong>Fläche</strong><br>${Math.round(parcelArea)} m²</div>` : ''}
+              ${slopeHTML}
               ${municipality ? `<div>🏘️ <strong>Gemeinde</strong><br>${municipality}</div>` : ''}
             </div>
+            ${kbsHTML}
             <div style="margin-top:0.75rem;display:flex;gap:0.5rem;flex-wrap:wrap">
-              <button class="btn-red" style="font-size:0.82rem;padding:0.4rem 0.9rem"
-                onclick="useClickedPosition(${lat},${lon},'${addrStr.replace(/'/g,"\'")}',${parcelArea||0})">
-                ✅ Diese Position verwenden
+              <button class="btn-red" style="font-size:0.82rem;padding:0.5rem 1rem"
+                onclick='useClickedPosition(${lat},${lon},${JSON.stringify(addrStr)},${parcelArea||0},${slopeInfo?slopeInfo.slopePercent:0})'>
+                ✅ Diese Parzelle verwenden
               </button>
-              <button class="btn-white" style="font-size:0.82rem;padding:0.4rem 0.9rem"
-                onclick="checkKBS(${lat},${lon},document.getElementById('mapEnvWarnings'));checkProtectedTrees(${lat},${lon},document.getElementById('mapEnvWarnings'))">
-                ⚠️ KBS & Bäume prüfen
+              <button class="btn-white" id="btnAddParcel" style="font-size:0.82rem;padding:0.5rem 1rem"
+                onclick='addParcelToSelection(${JSON.stringify({egrid:parcelNum,area:parcelArea||0,lat,lon,addr:addrStr,slope:slopeInfo?slopeInfo.slopePercent:0,municipality,geometry:parcelGeometry,kbs:!!kbsInfo?.hit})})'>
+                ${isSelected ? '✓ Hinzugefügt' : '➕ Zu Kombination'}
               </button>
             </div>
           </div>
-        </div>`;
-      // Drop a click marker
+        </div>
+        <div id="combinedParcelsPanel"></div>`;
+
+      // Click marker
       if (window._clickMarker) window._clickMarker.remove();
       const clickIcon = L.divIcon({
         className:'',
@@ -1472,17 +1505,283 @@ async function identifyParcelAtClick(lat, lon) {
       });
       window._clickMarker = L.marker([lat,lon],{icon:clickIcon}).addTo(window._leafletMap)
         .bindPopup(addrStr).openPopup();
+
+      // Show combined parcels if any
+      renderCombinedParcels();
+
+      // Draw parcel outline if geometry available
+      if (parcelGeometry && parcelGeometry.rings) {
+        drawParcelOutline(parcelGeometry.rings[0]);
+      }
     }
   } catch(e) {
-    if (badge) badge.textContent = '🛰️ Swisstopo Orthofoto';
+    if (badge) badge.textContent = '🛰️ Swisstopo · Tippen für Parzelle';
     console.warn('identify error:', e);
   }
 }
 
+
+
+// ─── GEFÄLLE-BERECHNUNG ───────────────────────────────────────────────────
+async function calcParcelSlope(ring) {
+  try {
+    if (!ring || ring.length < 3) return null;
+    // Nimm 4 Eckpunkte + Zentrum
+    const pts = [];
+    const step = Math.max(1, Math.floor(ring.length / 5));
+    for (let i = 0; i < ring.length; i += step) {
+      pts.push(ring[i]);
+    }
+    if (pts.length < 2) return null;
+
+    // Höhen abfragen für alle Punkte
+    const elevs = await Promise.all(pts.map(async ([lon, lat]) => {
+      try {
+        const r = await fetch('/api/geoportal', {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({action:'elevation', params:{lat, lon}})
+        });
+        const d = await r.json();
+        return parseFloat(d.elevation) || null;
+      } catch(e) { return null; }
+    }));
+
+    const valid = elevs.filter(e => e !== null);
+    if (valid.length < 2) return null;
+
+    const minH = Math.min(...valid);
+    const maxH = Math.max(...valid);
+    const diff = maxH - minH;
+
+    // Längste Diagonale berechnen
+    let maxDist = 0;
+    for (let i = 0; i < pts.length; i++) {
+      for (let j = i+1; j < pts.length; j++) {
+        const d = haversine(pts[i][1], pts[i][0], pts[j][1], pts[j][0]);
+        if (d > maxDist) maxDist = d;
+      }
+    }
+
+    const slopePercent = maxDist > 0 ? (diff / maxDist) * 100 : 0;
+    return { min: minH, max: maxH, diff, slopePercent, maxDist };
+  } catch(e) {
+    console.warn('slope calc error', e);
+    return null;
+  }
+}
+
+function haversine(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const rad = x => x * Math.PI / 180;
+  const dLat = rad(lat2 - lat1);
+  const dLon = rad(lon2 - lon1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(rad(lat1))*Math.cos(rad(lat2))*Math.sin(dLon/2)**2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+// ─── KBS AUF PARZELLE PRÜFEN ───────────────────────────────────────────────
+async function checkKBSOnParcel(geometry) {
+  try {
+    if (!geometry || !geometry.rings) return null;
+    // Bounding Box um die Parzelle
+    const ring = geometry.rings[0];
+    const lons = ring.map(p => p[0]);
+    const lats = ring.map(p => p[1]);
+    const bbox = {
+      minLon: Math.min(...lons), maxLon: Math.max(...lons),
+      minLat: Math.min(...lats), maxLat: Math.max(...lats)
+    };
+
+    // Abfrage KBS-Flächen und Punkte via geodienste.ch
+    const urlF = `https://geodienste.ch/db/kataster_belasteter_standorte_v1_5_0/deu/ogcapi/collections/belastete_standorte_flaechen/items?f=json&limit=20&bbox=${bbox.minLon},${bbox.minLat},${bbox.maxLon},${bbox.maxLat}`;
+    const urlP = `https://geodienste.ch/db/kataster_belasteter_standorte_v1_5_0/deu/ogcapi/collections/belastete_standorte_punkte/items?f=json&limit=20&bbox=${bbox.minLon},${bbox.minLat},${bbox.maxLon},${bbox.maxLat}`;
+
+    const [rF, rP] = await Promise.all([
+      fetch(urlF).then(r => r.ok ? r.json() : {features:[]}).catch(() => ({features:[]})),
+      fetch(urlP).then(r => r.ok ? r.json() : {features:[]}).catch(() => ({features:[]}))
+    ]);
+
+    const all = [...(rF.features||[]), ...(rP.features||[])];
+    if (all.length === 0) return { hit: false };
+
+    // Prüfe ob ein KBS-Feature geometrisch die Parzelle schneidet
+    // (Vereinfacht: Punkt-in-Polygon check mit Bbox)
+    for (const f of all) {
+      const p = f.properties || {};
+      const g = f.geometry;
+      if (!g) continue;
+
+      if (g.type === 'Point') {
+        if (pointInPolygon(g.coordinates, ring)) {
+          return { hit:true, bezeichnung: p.bezeichnung || p.name || 'Belasteter Standort', type:'point' };
+        }
+      } else if (g.type === 'Polygon' || g.type === 'MultiPolygon') {
+        // Einfacher Bbox-Overlap check
+        return { hit:true, bezeichnung: p.bezeichnung || p.name || 'Belasteter Standort', type:'polygon' };
+      }
+    }
+    return { hit: false };
+  } catch(e) {
+    console.warn('KBS check error', e);
+    return null;
+  }
+}
+
+function pointInPolygon(point, polygon) {
+  // Ray casting
+  const [x, y] = point;
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const [xi, yi] = polygon[i];
+    const [xj, yj] = polygon[j];
+    const intersect = ((yi > y) !== (yj > y)) &&
+      (x < (xj - xi) * (y - yi) / (yj - yi + 1e-12) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+// ─── PARZELLEN-OUTLINE ZEICHNEN ────────────────────────────────────────────
+function drawParcelOutline(ring) {
+  if (!window._leafletMap || !ring) return;
+  if (window._parcelPoly) {
+    try { window._leafletMap.removeLayer(window._parcelPoly); } catch(e) {}
+    window._parcelPoly = null;
+  }
+  // Ring ist [lon, lat] → Leaflet braucht [lat, lon]
+  const latlngs = ring.map(p => [p[1], p[0]]);
+  window._parcelPoly = L.polygon(latlngs, {
+    color:'#e53935', weight:3, fillColor:'#e53935', fillOpacity:0.15
+  }).addTo(window._leafletMap);
+}
+
+// ─── PARZELLEN-KOMBINATION ────────────────────────────────────────────────
+window._selectedParcels = [];
+window._parcelPolygons = []; // Leaflet polygons für Combined-Ansicht
+
+function addParcelToSelection(parcel) {
+  if (!parcel.egrid) {
+    alert('Diese Parzelle hat keine eindeutige ID und kann nicht kombiniert werden.');
+    return;
+  }
+  const existing = window._selectedParcels.findIndex(p => p.egrid === parcel.egrid);
+  if (existing >= 0) {
+    // Toggle: entfernen
+    window._selectedParcels.splice(existing, 1);
+  } else {
+    window._selectedParcels.push(parcel);
+  }
+  renderCombinedParcels();
+  redrawAllParcelPolygons();
+}
+
+function removeParcelFromSelection(egrid) {
+  window._selectedParcels = window._selectedParcels.filter(p => p.egrid !== egrid);
+  renderCombinedParcels();
+  redrawAllParcelPolygons();
+}
+
+function renderCombinedParcels() {
+  const panel = document.getElementById('combinedParcelsPanel');
+  if (!panel) return;
+  const list = window._selectedParcels;
+  if (list.length === 0) {
+    panel.innerHTML = '';
+    return;
+  }
+
+  const totalArea = list.reduce((s, p) => s + (+p.area || 0), 0);
+  const slopes = list.map(p => +p.slope || 0).filter(s => s > 0);
+  const avgSlope = slopes.length ? slopes.reduce((a,b)=>a+b,0) / slopes.length : 0;
+  const kbsCount = list.filter(p => p.kbs).length;
+
+  panel.innerHTML = `
+    <div style="background:#e3f2fd;border:1.5px solid #1976d2;border-radius:8px;padding:0.85rem 1.1rem;margin-top:0.75rem">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem">
+        <strong style="color:#0d47a1">🧩 Kombiniertes Baugrundstück (${list.length} ${list.length===1?'Parzelle':'Parzellen'})</strong>
+        <button class="btn-white" style="font-size:0.75rem;padding:0.25rem 0.6rem"
+          onclick="clearParcelSelection()">🗑️ Alle entfernen</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.4rem 1rem;font-size:0.85rem;margin-bottom:0.5rem">
+        <div><strong>Gesamtfläche:</strong> ${Math.round(totalArea).toLocaleString('de-CH')} m²</div>
+        ${avgSlope > 0 ? `<div><strong>Ø Gefälle:</strong> ${avgSlope.toFixed(1)}%</div>` : ''}
+        ${kbsCount > 0 ? `<div style="color:#e65100"><strong>⚠️ KBS-Treffer:</strong> ${kbsCount}</div>` : ''}
+      </div>
+      <div style="font-size:0.78rem;color:#1565c0;margin-bottom:0.5rem">
+        ${list.map(p => `
+          <div style="display:flex;justify-content:space-between;padding:0.25rem 0;border-top:1px solid #bbdefb">
+            <span>${p.kbs?'⚠️ ':''}${p.egrid} · ${Math.round(p.area)} m²${p.municipality?' · '+p.municipality:''}</span>
+            <button onclick="removeParcelFromSelection('${p.egrid}')" style="background:none;border:none;color:#d32f2f;cursor:pointer;font-size:1rem;padding:0 0.3rem">✕</button>
+          </div>`).join('')}
+      </div>
+      <button class="btn-red" style="width:100%;font-size:0.85rem"
+        onclick="applyCombinedParcels()">
+        ✅ Alle ${list.length} Parzellen als Baugrundstück übernehmen (${Math.round(totalArea)} m²)
+      </button>
+    </div>`;
+}
+
+function clearParcelSelection() {
+  window._selectedParcels = [];
+  renderCombinedParcels();
+  redrawAllParcelPolygons();
+}
+
+function redrawAllParcelPolygons() {
+  // Remove old combined polygons
+  if (window._parcelPolygons) {
+    window._parcelPolygons.forEach(poly => {
+      try { window._leafletMap.removeLayer(poly); } catch(e) {}
+    });
+  }
+  window._parcelPolygons = [];
+  // Draw selected parcels
+  window._selectedParcels.forEach(p => {
+    if (p.geometry && p.geometry.rings && window._leafletMap) {
+      const latlngs = p.geometry.rings[0].map(pt => [pt[1], pt[0]]);
+      const poly = L.polygon(latlngs, {
+        color:'#1976d2', weight:3, fillColor:'#1976d2', fillOpacity:0.25
+      }).addTo(window._leafletMap);
+      window._parcelPolygons.push(poly);
+    }
+  });
+}
+
+function applyCombinedParcels() {
+  const list = window._selectedParcels;
+  if (list.length === 0) return;
+  const totalArea = list.reduce((s, p) => s + (+p.area || 0), 0);
+  const slopes = list.map(p => +p.slope || 0).filter(s => s > 0);
+  const avgSlope = slopes.length ? slopes.reduce((a,b)=>a+b,0) / slopes.length : 0;
+
+  // Fill form
+  document.getElementById('parcelArea').value = Math.round(totalArea);
+  if (avgSlope > 0) {
+    const slopeEl = document.getElementById('slope');
+    if (slopeEl) slopeEl.value = Math.round(avgSlope);
+  }
+
+  // Auto-set region from first parcel
+  if (list[0]?.lat) autoSetRegionFromCoords(list[0].lat, list[0].lon);
+
+  // Show summary
+  document.getElementById('lookupResult').innerHTML = `
+    <div style="background:linear-gradient(135deg,#1565c0,#0d47a1);color:white;border-radius:8px;padding:0.9rem 1.1rem;margin-top:0.5rem">
+      <strong>✅ Kombiniertes Baugrundstück übernommen</strong><br>
+      <span style="font-size:0.85rem;opacity:0.9">
+        ${list.length} Parzellen · ${Math.round(totalArea).toLocaleString('de-CH')} m²
+        ${avgSlope > 0 ? ' · Gefälle '+avgSlope.toFixed(1)+'%' : ''}
+      </span>
+    </div>`;
+}
+
 // Apply clicked position to project
-function useClickedPosition(lat, lon, addr, area) {
-  if (area > 0) document.getElementById('parcelArea').value = area;
-  // Auto-set region factor from reverse geocoded canton
+function useClickedPosition(lat, lon, addr, area, slope) {
+  if (area > 0) document.getElementById('parcelArea').value = Math.round(area);
+  if (slope && slope > 0) {
+    const slopeEl = document.getElementById('slope');
+    if (slopeEl) slopeEl.value = Math.round(slope);
+  }
   autoSetRegionFromCoords(lat, lon);
   // Show elevation in result
   document.getElementById('lookupResult').innerHTML = `
