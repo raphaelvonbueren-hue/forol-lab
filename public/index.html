@@ -451,9 +451,14 @@ button{font-family:'Inter',sans-serif;padding:0.65rem 1.25rem;border:none;border
 
         <!-- PARZELLENSUCHE - immer sichtbar -->
         <div style="background:#f9f9f9;border:1px solid var(--br);border-radius:8px;padding:1rem;margin-bottom:1rem">
-          <label style="display:block;font-weight:600;font-size:0.85rem;margin-bottom:0.5rem">
+          <label style="display:block;font-weight:600;font-size:0.85rem;margin-bottom:0.35rem">
             🔢 Oder: PLZ + Parzellennummer
           </label>
+          <div style="font-size:0.75rem;color:var(--gt);margin-bottom:0.5rem;line-height:1.4">
+            Hinweis: Die Online-Parzellensuche funktioniert nur für öffentlich publizierte Kataster.
+            Bei keinem Treffer nutzen Sie bitte die <strong>Adresssuche</strong> oben — ein Klick auf die Karte
+            identifiziert die Parzelle zuverlässig via Swisstopo.
+          </div>
           <div class="parcel-search-grid" style="display:grid;grid-template-columns:110px 1fr 1fr auto;gap:0.5rem;align-items:end">
             <div>
               <div style="font-size:0.75rem;color:var(--gt);margin-bottom:0.2rem">PLZ</div>
@@ -823,43 +828,14 @@ function freshBuilding(id) {
            living:0, kitchen:0, bath:0, parkett:0, tiles:0 };
 }
 
-// ─── PARCEL DB ───────────────────────────────────────────────────────────
-const PARCELS = {
-  Frauenfeld:[
-    {n:'1234',area:850,zone:'W2',az:0.35,slope:2,soil:2,h:10.5,cov:0.30},
-    {n:'5678',area:1200,zone:'W3',az:0.45,slope:5,soil:1,h:13.5,cov:0.35},
-    {n:'9012',area:650,zone:'W2',az:0.30,slope:0,soil:2,h:10.5,cov:0.28}
-  ],
-  Weinfelden:[
-    {n:'2345',area:720,zone:'W2',az:0.30,slope:0,soil:2,h:10.5,cov:0.28},
-    {n:'6789',area:980,zone:'WG3',az:0.40,slope:3,soil:1,h:13.5,cov:0.32}
-  ],
-  Amriswil:[
-    {n:'3456',area:890,zone:'W3',az:0.35,slope:1,soil:2,h:13.5,cov:0.30},
-    {n:'7890',area:1100,zone:'WG3',az:0.45,slope:4,soil:2,h:13.5,cov:0.35}
-  ],
-  StGallen:[
-    {n:'9876',area:950,zone:'WG3',az:0.50,slope:8,soil:3,h:16,cov:0.38},
-    {n:'5432',area:780,zone:'W2',az:0.35,slope:6,soil:3,h:10.5,cov:0.30},
-    {n:'1098',area:1300,zone:'WG4',az:0.55,slope:10,soil:3,h:16,cov:0.40}
-  ],
-  Gossau:[
-    {n:'4567',area:820,zone:'W2',az:0.30,slope:2,soil:2,h:10.5,cov:0.28},
-    {n:'8901',area:1050,zone:'W3',az:0.40,slope:4,soil:2,h:13.5,cov:0.33}
-  ],
-  Wil:[
-    {n:'2109',area:900,zone:'W3',az:0.35,slope:3,soil:2,h:13.5,cov:0.30},
-    {n:'6543',area:750,zone:'W2',az:0.30,slope:1,soil:2,h:10.5,cov:0.28}
-  ],
-  Appenzell:[
-    {n:'3210',area:1200,zone:'W2',az:0.25,slope:12,soil:3,h:10.5,cov:0.22},
-    {n:'7654',area:950,zone:'W2',az:0.30,slope:15,soil:3,h:10.5,cov:0.25}
-  ],
-  Herisau:[
-    {n:'4321',area:880,zone:'W2',az:0.30,slope:5,soil:2,h:10.5,cov:0.28},
-    {n:'8765',area:1100,zone:'W3',az:0.35,slope:8,soil:3,h:13.5,cov:0.30}
-  ]
-};
+// ─── PARCEL DB ──────────────────────────────────────────────────────────
+// Keine Mock-Daten mehr. Parzellen werden via:
+// 1) Adresssuche auf Karte (primary)
+// 2) geodienste.ch parcel_search API
+// 3) Manuelle Eingabe
+// abgefragt. Die echten Parzellennummern für TG/SG/AI/AR kommen
+// aus der amtlichen Vermessung (Swisstopo AV + kantonale WFS).
+const PARCELS = {};
 
 // ─── BKP DATABASE (korrektes Format: dreistellig numerisch) ──────────────
 // BKP Nummern: 1-stellig Hauptgruppe, 2-stellig Untergruppe
@@ -1930,94 +1906,31 @@ async function lookupParcel() {
   await delay(800);
   unload();
 
-  // Fallback: mock database
-  let p = null;
-  for (const [key, list] of Object.entries(PARCELS)) {
-    if (selectedPLZ[1].toLowerCase().includes(key.toLowerCase()) ||
-        key.toLowerCase().includes(selectedPLZ[1].toLowerCase().split(' ')[0].toLowerCase())) {
-      p = list.find(x => x.n === num);
-      if (p) break;
-    }
-  }
-
-  if (!p) {
-    // Try to find by municipality name match in PARCELS (any TG/SG/AI/AR key)
-    const kantParcels = Object.entries(PARCELS)
-      .filter(([key]) => {
-        // Match by canton from PARCELS keys
-        const tgKeys = ['Frauenfeld','Weinfelden','Amriswil','Romanshorn','Kreuzlingen','Arbon','Bischofszell','Sirnach','Münchwilen','Aadorf'];
-        const sgKeys = ['StGallen','Gossau','Wil'];
-        if (selectedPLZ[2]==='TG') return tgKeys.includes(key);
-        if (selectedPLZ[2]==='SG') return sgKeys.includes(key);
-        if (selectedPLZ[2]==='AI') return key==='Appenzell';
-        if (selectedPLZ[2]==='AR') return key==='Herisau';
-        return false;
-      });
-    
-    // Try matching by selected municipality name
-    let matchedList = null;
-    for (const [key, list] of kantParcels) {
-      if (selectedPLZ[1].toLowerCase().includes(key.toLowerCase()) ||
-          key.toLowerCase().includes(selectedPLZ[1].toLowerCase().split(' ')[0].toLowerCase())) {
-        matchedList = list;
-        break;
-      }
-    }
-
-    if (matchedList) {
-      // Municipality matched but parcel number wrong
-      out.innerHTML = `
-        <div style="background:#fff8e1;border-left:4px solid #ff9800;border-radius:6px;padding:1.25rem;margin-top:1rem">
-          <strong>⚠️ Parzellennummer ${num} nicht gefunden in ${selectedPLZ[1]}</strong><br>
-          <span style="font-size:0.875rem;color:var(--gt)">
-            Verfügbare Testnummern: ${matchedList.map(x=>'<strong>'+x.n+'</strong>').join(' · ')}
-          </span>
-          <div style="margin-top:1rem;display:flex;gap:0.5rem;flex-wrap:wrap">
-            <button class="btn-red" onclick="goTo('surfaces')" style="font-size:0.85rem">→ Manuell eingeben</button>
-            <button class="btn-white" onclick="document.getElementById('fileIn').click()" style="font-size:0.85rem">📄 Plan hochladen</button>
-          </div>
-        </div>`;
-    } else {
-      out.innerHTML = `
-        <div style="background:#fff8e1;border-left:4px solid #ff9800;border-radius:6px;padding:1.25rem;margin-top:1rem">
-          <strong>⚠️ Parzelle ${num} in ${selectedPLZ[1]} nicht gefunden</strong><br>
-          <span style="font-size:0.875rem;color:var(--gt)">
-            Bitte überprüfen Sie die Parzellennummer oder geben Sie die Daten manuell ein.
-          </span>
-          <div style="margin-top:1rem;display:flex;gap:0.5rem;flex-wrap:wrap">
-            <button class="btn-red" onclick="goTo('surfaces')" style="font-size:0.85rem">→ Daten manuell eingeben</button>
-            <button class="btn-white" onclick="document.getElementById('fileIn').click()" style="font-size:0.85rem">📄 Plan hochladen (KI-Analyse)</button>
-          </div>
-        </div>`;
-    }
-    return;
-  }
-
-  const maxFP = Math.round(p.area * p.cov);
-  const maxGFA = Math.round(p.area * p.az);
-  const recFloors = Math.min(Math.ceil(maxGFA / maxFP), Math.floor(p.h / 2.8));
-  const dim = Math.round(Math.sqrt(maxFP / recFloors));
+  await delay(600);
+  unload();
 
   out.innerHTML = `
-    <div class="result-card">
-      <strong>✅ Parzelle ${p.n} – ${selectedPLZ[0]} ${selectedPLZ[1]} (${selectedPLZ[2]})</strong>
-      <div class="result-grid">
-        <div class="result-item"><div class="result-item-label">Fläche</div><div class="result-item-value">${p.area} m²</div></div>
-        <div class="result-item"><div class="result-item-label">Zone</div><div class="result-item-value">${p.zone}</div></div>
-        <div class="result-item"><div class="result-item-label">Ausnützung</div><div class="result-item-value">${p.az}</div></div>
-        <div class="result-item"><div class="result-item-label">Max. GFA</div><div class="result-item-value">${maxGFA} m²</div></div>
-        <div class="result-item"><div class="result-item-label">Max. Überbauung</div><div class="result-item-value">${maxFP} m²</div></div>
-        <div class="result-item"><div class="result-item-label">Hangneigung</div><div class="result-item-value">${p.slope}%</div></div>
+    <div style="background:#fff8e1;border-left:4px solid #ff9800;border-radius:8px;padding:1rem;margin-top:1rem">
+      <strong>ℹ️ Parzelle ${num} in ${selectedPLZ[1]} (${selectedPLZ[2]}) nicht online gefunden</strong>
+      <div style="font-size:0.85rem;color:var(--gt);margin-top:0.5rem;line-height:1.5">
+        Die Kantone haben ihre Parzellen-Nummern unterschiedlich publiziert.
+        Für <strong>${selectedPLZ[2]}</strong> ist die direkte Nummernsuche nicht zuverlässig verfügbar.
+        <br><br>
+        <strong>Bitte nutzen Sie die Adresssuche oben:</strong> Klick auf die Karte identifiziert
+        die Parzelle automatisch mit Nummer, Fläche und Geometrie via Swisstopo.
       </div>
-      <div style="margin-top:0.75rem;font-size:0.85rem;opacity:0.9">
-        💡 Empfehlung: ${recFloors} Geschosse · ca. ${dim}m × ${dim}m Grundriss
+      <div style="margin-top:0.75rem;display:flex;gap:0.5rem;flex-wrap:wrap">
+        <button class="btn-red"
+          onclick="document.getElementById('addrInput').focus();document.getElementById('addrInput').scrollIntoView({behavior:'smooth',block:'center'})"
+          style="font-size:0.85rem">
+          📍 Zur Adresssuche
+        </button>
+        <button class="btn-white" onclick="goTo('surfaces')" style="font-size:0.85rem">
+          ✏️ Manuell eingeben
+        </button>
       </div>
-      <button class="btn-green" style="margin-top:1rem;width:100%" onclick='applyParcel(${JSON.stringify(p)},${recFloors},${dim})'>
-        Daten übernehmen →
-      </button>
     </div>`;
-  // Show map
-  getMunicipalityCoords(selectedPLZ[1], selectedPLZ[2]).then(coords => {
+    getMunicipalityCoords(selectedPLZ[1], selectedPLZ[2]).then(coords => {
     if (coords) {
       showParcelMap(coords.lat, coords.lon, 'Parzelle ' + num + ' · ' + selectedPLZ[1]);
       checkKBS(coords.lat, coords.lon, out);
