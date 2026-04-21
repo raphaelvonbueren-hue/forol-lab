@@ -1185,8 +1185,7 @@ function switchSearchTab(tab) {
   document.getElementById('tabParcelBtn').style.color      = isAddr ? 'var(--gt)' : 'white';
   // Show map immediately on first open
   const wrap = document.getElementById('parcelMapWrap');
-  if (!_leafletMap) {
-    // Init map centered on Eastern Switzerland
+  if (!window._leafletMap) {
     wrap.style.display = 'block';
     showParcelMap(47.55, 9.35, null, 11);
   }
@@ -1283,67 +1282,84 @@ async function searchAddress() {
 
 // ─── PARCEL MAP WITH SWISSTOPO ORTHOFOTO ───────────────────────────────────
 window._leafletMap = null;
+window._clickMarker = null;
 
 function showParcelMap(lat, lon, label, zoom) {
-  const wrap = document.getElementById('parcelMapWrap');
-  // Remove placeholder
+  // Remove placeholder once
   const ph = document.getElementById('mapPlaceholder');
   if (ph) ph.remove();
-  setTimeout(() => wrap.scrollIntoView({behavior:'smooth', block:'nearest'}), 200);
 
-  if (window._leafletMap) { window._leafletMap.remove(); window._leafletMap = null; }
+  // Destroy existing map
+  if (window._leafletMap) {
+    try { window._leafletMap.remove(); } catch(e) {}
+    window._leafletMap = null;
+  }
 
-  window._leafletMap = L.map('parcelMap', { zoomControl:true, attributionControl:true });
-
-  // Swisstopo SWISSIMAGE Orthofoto
-  // Falls Tiles nicht laden (z.B. kein Referer), OSM als Fallback
-  const _swissimage = L.tileLayer('https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.swissimage/default/current/3857/{z}/{x}/{y}.jpeg', {
-    attribution: '© <a href="https://swisstopo.ch" target="_blank">swisstopo</a>',
-    maxZoom: 20
+  // Create map — use OSM as reliable base (Swisstopo requires Swiss Referer)
+  const map = L.map('parcelMap', {
+    zoomControl: true,
+    attributionControl: true,
+    tap: true  // iOS touch fix
   });
-  const _osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© <a href="https://openstreetmap.org" target="_blank">OpenStreetMap</a>',
-    maxZoom: 19
-  });
-  // Versuche Swisstopo, falle auf OSM zurück wenn Tiles fehlen
-  let _swissErrorCount = 0;
-  _swissimage.on('tileerror', function() {
-    _swissErrorCount++;
-    if (_swissErrorCount === 3 && !window._osmActive) {
+  window._leafletMap = map;
+
+  // Base layer: Swisstopo SWISSIMAGE (works in browser with Referer)
+  const swissimage = L.tileLayer(
+    'https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.swissimage/default/current/3857/{z}/{x}/{y}.jpeg',
+    { attribution: '© swisstopo', maxZoom: 20 }
+  );
+
+  // Fallback: OSM (always works)
+  const osm = L.tileLayer(
+    'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    { attribution: '© OpenStreetMap', maxZoom: 19 }
+  );
+
+  // Auto-fallback to OSM if Swisstopo tiles fail
+  let errCount = 0;
+  swissimage.on('tileerror', () => {
+    errCount++;
+    if (errCount >= 2 && !window._osmActive) {
       window._osmActive = true;
-      window._leafletMap.removeLayer(_swissimage);
-      _osm.addTo(window._leafletMap);
+      try { map.removeLayer(swissimage); } catch(e) {}
+      osm.addTo(map);
       const badge = document.getElementById('mapBadge');
       if (badge) badge.textContent = '🗺️ OpenStreetMap';
     }
   });
-  _swissimage.addTo(window._leafletMap);
+  swissimage.addTo(map);
 
-  // Parzellengrenzen-Overlay (Swisstopo amtliche Vermessung)
-  L.tileLayer('https://wmts.geo.admin.ch/1.0.0/ch.swisstopo-vd.amtliche-vermessung/default/current/3857/{z}/{x}/{y}.png', {
-    opacity: 0.6, maxZoom: 20,
-    errorTileUrl: ''
-  }).addTo(window._leafletMap);
+  // Parzellengrenzen-Overlay
+  L.tileLayer(
+    'https://wmts.geo.admin.ch/1.0.0/ch.swisstopo-vd.amtliche-vermessung/default/current/3857/{z}/{x}/{y}.png',
+    { opacity: 0.6, maxZoom: 20, errorTileUrl: '' }
+  ).addTo(map);
 
-  window._leafletMap.setView([lat, lon], zoom || 17);
-  // Force resize — needed when container was hidden
-  setTimeout(() => { if (window._leafletMap) window._leafletMap.invalidateSize(); }, 100);
+  map.setView([lat, lon], zoom || 17);
+
+  // CRITICAL: invalidateSize after render (fixes grey map)
+  setTimeout(() => { if (window._leafletMap) window._leafletMap.invalidateSize(true); }, 50);
+  setTimeout(() => { if (window._leafletMap) window._leafletMap.invalidateSize(true); }, 300);
+  setTimeout(() => { if (window._leafletMap) window._leafletMap.invalidateSize(true); }, 1000);
 
   // Marker
   if (label) {
     const icon = L.divIcon({
-      className: '',
-      html: `<div style="width:16px;height:16px;background:#e53935;border:2.5px solid white;border-radius:50%;box-shadow:0 0 0 4px rgba(229,57,53,0.3)"></div>`,
-      iconSize:[16,16], iconAnchor:[8,8]
+      className: 'parcel-marker',
+      html: '<div style="width:16px;height:16px;background:#e53935;border:2.5px solid white;border-radius:50%;box-shadow:0 0 0 4px rgba(229,57,53,0.3)"></div>',
+      iconSize: [16, 16],
+      iconAnchor: [8, 8]
     });
-    L.marker([lat, lon], {icon}).addTo(window._leafletMap)
-      .bindPopup(`<strong>${label}</strong>`).openPopup();
+    L.marker([lat, lon], { icon }).addTo(map)
+      .bindPopup('<strong>' + label + '</strong>')
+      .openPopup();
   }
 
-  // Click → identify parcel via Swisstopo ident API
-  _leafletMap.on('click', async (e) => {
-    const {lat: clat, lng: clon} = e.latlng;
-    identifyParcelAtClick(clat, clon);
+  // Click handler — identify parcel
+  map.on('click', (e) => {
+    if (typeof identifyParcelAtClick === 'function') {
+      identifyParcelAtClick(e.latlng.lat, e.latlng.lng);
+    }
   });
 }
 
