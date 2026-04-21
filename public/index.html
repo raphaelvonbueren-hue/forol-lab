@@ -72,6 +72,18 @@ button{font-family:'Inter',sans-serif;padding:0.65rem 1.25rem;border:none;border
 .btab:hover:not(.sel){border-color:var(--red)}
 
 
+/* SEARCH TABS */
+.addr-suggestion{padding:0.6rem 0.9rem;border-radius:6px;cursor:pointer;font-size:0.88rem;display:flex;align-items:center;gap:0.6rem;transition:background 0.15s}
+.addr-suggestion:hover{background:#f0f0f0}
+.addr-suggestion-icon{font-size:1.1rem;flex-shrink:0}
+.addr-suggestion-main{font-weight:600;color:var(--dk)}
+.addr-suggestion-sub{font-size:0.78rem;color:var(--gt)}
+#addrSuggestions{border:1px solid var(--br);border-radius:8px;overflow:hidden;background:white;display:none}
+/* MAP CLICK PANEL */
+.map-click-hint{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);z-index:999;background:rgba(0,0,0,0.72);color:white;padding:0.3rem 0.9rem;border-radius:20px;font-size:0.78rem;pointer-events:none;white-space:nowrap;transition:opacity 0.4s}
+.parcel-click-panel{background:#e8f5e9;border:1.5px solid #43a047;border-radius:8px;padding:0.85rem 1.1rem;margin-top:0.75rem;display:none}
+.parcel-click-title{font-weight:700;color:#1b5e20;font-size:0.92rem;margin-bottom:0.4rem}
+.parcel-click-info{font-size:0.85rem;color:#2e4a2e;line-height:1.6}
 /* PARCEL MAP */
 #parcelMapWrap{margin-top:1rem;border-radius:10px;overflow:hidden;border:2px solid var(--br);display:none;position:relative}
 #parcelMap{height:320px;width:100%}
@@ -229,8 +241,38 @@ button{font-family:'Inter',sans-serif;padding:0.65rem 1.25rem;border:none;border
       </div>
 
       <div class="card">
-        <div class="card-title">🔍 Parzellen-Recherche <span class="badge badge-green">AUTO</span></div>
-        <div class="lookup-box">
+        <div class="card-title">🔍 Grundstück suchen <span class="badge badge-green">AUTO</span></div>
+
+        <!-- Tab switcher -->
+        <div style="display:flex;gap:0;margin-bottom:1rem;border:1px solid var(--br);border-radius:8px;overflow:hidden;width:fit-content">
+          <button id="tabAddrBtn" onclick="switchSearchTab('addr')"
+            style="padding:0.5rem 1.25rem;border:none;cursor:pointer;font-size:0.87rem;font-weight:600;background:var(--red);color:white;transition:all 0.2s">
+            📍 Adresse
+          </button>
+          <button id="tabParcelBtn" onclick="switchSearchTab('parcel')"
+            style="padding:0.5rem 1.25rem;border:none;cursor:pointer;font-size:0.87rem;font-weight:600;background:#f5f5f5;color:var(--gt);transition:all 0.2s">
+            🔢 Parzellennummer
+          </button>
+        </div>
+
+        <!-- ADRESS-SUCHE -->
+        <div id="tabAddr" class="lookup-box">
+          <div style="display:grid;grid-template-columns:1fr auto;gap:0.75rem;align-items:end">
+            <div class="fg" style="margin:0">
+              <label>Strasse, Hausnummer, Ort</label>
+              <input id="addrInput" placeholder="z.B. Hauptstrasse 12, Romanshorn"
+                style="font-size:1rem"
+                oninput="onAddrInput(this.value)"
+                onkeydown="if(event.key==='Enter')searchAddress()">
+            </div>
+            <button class="btn-red" onclick="searchAddress()" style="height:fit-content">Suchen</button>
+          </div>
+          <div id="addrSuggestions" style="margin-top:0.4rem"></div>
+          <div id="addrResult"></div>
+        </div>
+
+        <!-- PARZELLEN-SUCHE -->
+        <div id="tabParcel" class="lookup-box" style="display:none">
           <div style="display:grid;grid-template-columns:130px 1fr 1fr auto;gap:1rem;align-items:end">
             <div class="fg">
               <label>Postleitzahl</label>
@@ -248,11 +290,14 @@ button{font-family:'Inter',sans-serif;padding:0.65rem 1.25rem;border:none;border
           </div>
           <div id="plzMatches" style="margin-top:0.5rem"></div>
           <div id="lookupResult"></div>
-          <div id="parcelMapWrap">
-            <div class="map-badge" id="mapBadge">🛰️ Swisstopo Orthofoto</div>
-            <div id="parcelMap"></div>
-          </div>
         </div>
+
+        <!-- KARTE (immer sichtbar unter beiden Tabs) -->
+        <div id="parcelMapWrap" style="margin-top:1rem">
+          <div class="map-badge" id="mapBadge">🛰️ Swisstopo Orthofoto · Klicken Sie auf eine Parzelle</div>
+          <div id="parcelMap"></div>
+        </div>
+        <div id="mapEnvWarnings"></div>
       </div>
 
       <div class="card">
@@ -931,51 +976,261 @@ function selectPLZEntry(plz, name, kt) {
   if (rc) { rc.classList.add('sel'); S.region=kt; S.rf=rf; }
 }
 
+
+// ─── TAB SWITCHER ──────────────────────────────────────────────────────────
+function switchSearchTab(tab) {
+  const isAddr = tab === 'addr';
+  document.getElementById('tabAddr').style.display   = isAddr ? '' : 'none';
+  document.getElementById('tabParcel').style.display = isAddr ? 'none' : '';
+  document.getElementById('tabAddrBtn').style.background   = isAddr ? 'var(--red)' : '#f5f5f5';
+  document.getElementById('tabAddrBtn').style.color        = isAddr ? 'white' : 'var(--gt)';
+  document.getElementById('tabParcelBtn').style.background = isAddr ? '#f5f5f5' : 'var(--red)';
+  document.getElementById('tabParcelBtn').style.color      = isAddr ? 'var(--gt)' : 'white';
+  // Show map immediately on first open
+  const wrap = document.getElementById('parcelMapWrap');
+  if (!_leafletMap) {
+    // Init map centered on Eastern Switzerland
+    wrap.style.display = 'block';
+    showParcelMap(47.55, 9.35, null, 11);
+  }
+}
+
+// ─── ADDRESS SEARCH ────────────────────────────────────────────────────────
+let _addrTimeout = null;
+
+function onAddrInput(val) {
+  clearTimeout(_addrTimeout);
+  if (val.length < 3) { hideSuggestions(); return; }
+  _addrTimeout = setTimeout(() => fetchAddressSuggestions(val), 300);
+}
+
+async function fetchAddressSuggestions(query) {
+  try {
+    const url = `https://api3.geo.admin.ch/rest/services/ech/SearchServer` +
+      `?searchText=${encodeURIComponent(query)}&type=locations&origins=address,street&sr=4326&lang=de&limit=6`;
+    const r = await fetch(url);
+    if (!r.ok) { hideSuggestions(); return; }
+    const data = await r.json();
+    const results = data.results || [];
+    showSuggestions(results);
+  } catch(e) { hideSuggestions(); }
+}
+
+function showSuggestions(results) {
+  const box = document.getElementById('addrSuggestions');
+  if (!results.length) { hideSuggestions(); return; }
+  box.style.display = 'block';
+  box.innerHTML = results.map((r, i) => {
+    const a = r.attrs || {};
+    const label = (a.label || '').replace(/<[^>]*>/g, '');
+    const detail = a.detail || '';
+    const icon = a.origin === 'address' ? '🏠' : '🛣️';
+    return `<div class="addr-suggestion" onclick="selectAddressSuggestion(${a.lat},${a.lon},'${label.replace(/'/g,"\'")}')">
+      <span class="addr-suggestion-icon">${icon}</span>
+      <div>
+        <div class="addr-suggestion-main">${label}</div>
+        ${detail ? `<div class="addr-suggestion-sub">${detail}</div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function hideSuggestions() {
+  const box = document.getElementById('addrSuggestions');
+  box.style.display = 'none';
+  box.innerHTML = '';
+}
+
+function selectAddressSuggestion(lat, lon, label) {
+  hideSuggestions();
+  document.getElementById('addrInput').value = label;
+  document.getElementById('addrResult').innerHTML = '';
+  // Fly map to address and trigger parcel identify
+  showParcelMap(lat, lon, label, 18);
+  // Auto-identify the parcel at this address
+  setTimeout(() => identifyParcelAtClick(lat, lon), 600);
+  // KBS check
+  const envDiv = document.getElementById('mapEnvWarnings');
+  if (envDiv) envDiv.innerHTML = '';
+  checkKBS(lat, lon, document.getElementById('mapEnvWarnings') || document.body);
+  checkProtectedTrees(lat, lon, document.getElementById('mapEnvWarnings') || document.body);
+}
+
+async function searchAddress() {
+  const val = document.getElementById('addrInput').value.trim();
+  if (!val) return;
+  hideSuggestions();
+  document.getElementById('addrResult').innerHTML =
+    `<div style="color:var(--gt);font-size:0.85rem;padding:0.5rem 0">⏳ Suche läuft…</div>`;
+  try {
+    const url = `https://api3.geo.admin.ch/rest/services/ech/SearchServer` +
+      `?searchText=${encodeURIComponent(val)}&type=locations&origins=address,street,zipcode&sr=4326&lang=de&limit=1`;
+    const r = await fetch(url);
+    const data = await r.json();
+    const hit = data.results?.[0]?.attrs;
+    if (!hit) {
+      document.getElementById('addrResult').innerHTML =
+        `<div class="alert alert-info" style="margin-top:0.5rem">Adresse nicht gefunden. Bitte genauer eingeben.</div>`;
+      return;
+    }
+    const label = (hit.label || '').replace(/<[^>]*>/g, '');
+    document.getElementById('addrResult').innerHTML = '';
+    selectAddressSuggestion(hit.lat, hit.lon, label);
+  } catch(e) {
+    document.getElementById('addrResult').innerHTML =
+      `<div class="alert alert-info" style="margin-top:0.5rem">Fehler bei der Suche: ${e.message}</div>`;
+  }
+}
+
 // ─── PARCEL MAP WITH SWISSTOPO ORTHOFOTO ───────────────────────────────────
 let _leafletMap = null;
 
-function showParcelMap(lat, lon, label) {
+function showParcelMap(lat, lon, label, zoom) {
   const wrap = document.getElementById('parcelMapWrap');
   wrap.style.display = 'block';
-  // Small scroll to map
   setTimeout(() => wrap.scrollIntoView({behavior:'smooth', block:'nearest'}), 200);
 
-  if (_leafletMap) {
-    _leafletMap.remove();
-    _leafletMap = null;
-  }
+  if (_leafletMap) { _leafletMap.remove(); _leafletMap = null; }
 
   _leafletMap = L.map('parcelMap', { zoomControl:true, attributionControl:true });
 
-  // Swisstopo SWISSIMAGE Orthofoto (aktuellste Aufnahme)
+  // Swisstopo SWISSIMAGE Orthofoto
   L.tileLayer('https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.swissimage/default/current/3857/{z}/{x}/{y}.jpeg', {
     attribution: '© <a href="https://swisstopo.ch">swisstopo</a>',
-    maxZoom: 20,
-    crossOrigin: true
+    maxZoom: 20, crossOrigin: true
   }).addTo(_leafletMap);
 
-  // Swisstopo Kataster-Überlagerung (Parzellengrenzen)
-  L.tileLayer('https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.amtliches-kw.amtliche-karte_1000/default/current/3857/{z}/{x}/{y}.png', {
-    opacity: 0.35,
-    maxZoom: 20,
-    crossOrigin: true
+  // Parzellengrenzen-Overlay (Swisstopo amtliche Karte)
+  L.tileLayer('https://wmts.geo.admin.ch/1.0.0/ch.swisstopo-vd.amtliche-vermessung/default/current/3857/{z}/{x}/{y}.png', {
+    opacity: 0.55, maxZoom: 20, crossOrigin: true
   }).addTo(_leafletMap);
 
-  _leafletMap.setView([lat, lon], 17);
+  _leafletMap.setView([lat, lon], zoom || 17);
 
-  // Custom pulsing marker
-  const icon = L.divIcon({
-    className: '',
-    html: `<div style="width:18px;height:18px;background:#e53935;border:3px solid white;border-radius:50%;box-shadow:0 0 0 4px rgba(229,57,53,0.3)"></div>`,
-    iconSize:[18,18], iconAnchor:[9,9]
+  // Marker
+  if (label) {
+    const icon = L.divIcon({
+      className: '',
+      html: `<div style="width:16px;height:16px;background:#e53935;border:2.5px solid white;border-radius:50%;box-shadow:0 0 0 4px rgba(229,57,53,0.3)"></div>`,
+      iconSize:[16,16], iconAnchor:[8,8]
+    });
+    L.marker([lat, lon], {icon}).addTo(_leafletMap)
+      .bindPopup(`<strong>${label}</strong>`).openPopup();
+  }
+
+  // Click → identify parcel via Swisstopo ident API
+  _leafletMap.on('click', async (e) => {
+    const {lat: clat, lng: clon} = e.latlng;
+    identifyParcelAtClick(clat, clon);
   });
-  L.marker([lat, lon], {icon}).addTo(_leafletMap)
-    .bindPopup(`<strong>${label}</strong>`)
-    .openPopup();
+}
+
+// Identify parcel at clicked coordinates via Swisstopo
+async function identifyParcelAtClick(lat, lon) {
+  // Show loading indicator on map
+  const badge = document.getElementById('mapBadge');
+  if (badge) badge.textContent = '⏳ Parzelle wird ermittelt…';
+
+  try {
+    // 1. Reverse geocode — get address at point
+    const geoUrl = `https://api3.geo.admin.ch/rest/services/ech/SearchServer?searchText=${lon},${lat}&type=locations&origins=address&sr=4326&lang=de&limit=1`;
+    const geoR = await fetch(geoUrl);
+    const geoData = await geoR.json();
+    const addrHit = geoData.results?.[0]?.attrs;
+
+    // 2. Elevation
+    const elevR = await fetch(`/api/geoportal`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({action:'elevation', params:{lat, lon}})
+    });
+    const elevData = await elevR.json();
+
+    // 3. Municipality at click point
+    const munUrl = `https://api3.geo.admin.ch/rest/services/ech/SearchServer?searchText=${lat},${lon}&type=locations&origins=gg25&sr=4326&lang=de&limit=1`;
+    // Use reverse lookup via parcel identify
+    const identUrl = `https://api3.geo.admin.ch/rest/services/all/MapServer/identify` +
+      `?geometry=${lon},${lat}&geometryType=esriGeometryPoint&imageDisplay=1000,1000,96` +
+      `&mapExtent=${lon-0.01},${lat-0.01},${lon+0.01},${lat+0.01}` +
+      `&tolerance=3&layers=all:ch.swisstopo-vd.amtliche-vermessung&sr=4326&lang=de&returnGeometry=false`;
+    const identR = await fetch(identUrl);
+    const identData = await identR.json();
+    const parcelHit = identData.results?.[0];
+
+    // Build result panel
+    const addrStr = addrHit
+      ? (addrHit.label||'').replace(/<[^>]*>/g,'')
+      : `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+    const parcelNum = parcelHit?.properties?.egrid || parcelHit?.properties?.number || null;
+    const parcelArea = parcelHit?.properties?.area || null;
+    const municipality = parcelHit?.properties?.gemname || parcelHit?.properties?.municipality || null;
+
+    // Update badge
+    if (badge) badge.textContent = '🛰️ Swisstopo Orthofoto · Klicken Sie auf eine Parzelle';
+
+    // Show click result panel
+    const envDiv = document.getElementById('mapEnvWarnings');
+    if (envDiv) {
+      envDiv.innerHTML = `
+        <div class="parcel-click-panel" style="display:block">
+          <div class="parcel-click-title">📌 Angeklickte Position</div>
+          <div class="parcel-click-info">
+            <div style="margin-bottom:0.5rem">
+              <strong>${addrStr}</strong>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.4rem 1rem;font-size:0.82rem">
+              <div>📍 <strong>Koordinaten</strong><br>${lat.toFixed(5)}° N, ${lon.toFixed(5)}° E</div>
+              <div>⛰️ <strong>Höhe</strong><br>${elevData.elevation ? elevData.elevation + ' m.ü.M.' : '–'}</div>
+              ${parcelNum ? `<div>📋 <strong>EGRID / Parzelle</strong><br>${parcelNum}</div>` : ''}
+              ${parcelArea ? `<div>📐 <strong>Fläche</strong><br>${Math.round(parcelArea)} m²</div>` : ''}
+              ${municipality ? `<div>🏘️ <strong>Gemeinde</strong><br>${municipality}</div>` : ''}
+            </div>
+            <div style="margin-top:0.75rem;display:flex;gap:0.5rem;flex-wrap:wrap">
+              <button class="btn-red" style="font-size:0.82rem;padding:0.4rem 0.9rem"
+                onclick="useClickedPosition(${lat},${lon},'${addrStr.replace(/'/g,"\'")}',${parcelArea||0})">
+                ✅ Diese Position verwenden
+              </button>
+              <button class="btn-white" style="font-size:0.82rem;padding:0.4rem 0.9rem"
+                onclick="checkKBS(${lat},${lon},document.getElementById('mapEnvWarnings'));checkProtectedTrees(${lat},${lon},document.getElementById('mapEnvWarnings'))">
+                ⚠️ KBS & Bäume prüfen
+              </button>
+            </div>
+          </div>
+        </div>`;
+      // Drop a click marker
+      if (window._clickMarker) window._clickMarker.remove();
+      const clickIcon = L.divIcon({
+        className:'',
+        html:`<div style="width:22px;height:22px;background:#ff6d00;border:3px solid white;border-radius:50%;box-shadow:0 0 0 4px rgba(255,109,0,0.35);animation:pulse 1.5s infinite"></div>`,
+        iconSize:[22,22], iconAnchor:[11,11]
+      });
+      window._clickMarker = L.marker([lat,lon],{icon:clickIcon}).addTo(_leafletMap)
+        .bindPopup(addrStr).openPopup();
+    }
+  } catch(e) {
+    if (badge) badge.textContent = '🛰️ Swisstopo Orthofoto';
+    console.warn('identify error:', e);
+  }
+}
+
+// Apply clicked position to project
+function useClickedPosition(lat, lon, addr, area) {
+  if (area > 0) document.getElementById('parcelArea').value = area;
+  // Set region based on municipality lookup
+  getMunicipalityCoords(addr.split(',').pop().trim(), '').then(m => {
+    if (m?.lat) {/* already have coords */}
+  });
+  // Show elevation in result
+  document.getElementById('lookupResult').innerHTML = `
+    <div style="background:linear-gradient(135deg,#1565c0,#0d47a1);color:white;border-radius:8px;padding:0.9rem 1.1rem;margin-top:0.5rem">
+      <strong>✅ Position übernommen</strong><br>
+      <span style="font-size:0.85rem;opacity:0.9">${addr}</span><br>
+      ${area ? `<span style="font-size:0.82rem;opacity:0.8">Parzellenfläche: ${Math.round(area)} m²</span>` : ''}
+    </div>`;
 }
 
 // ─── KBS LOOKUP ────────────────────────────────────────────────────────────
 async function checkKBS(lat, lon, resultEl) {
+  if (!resultEl) resultEl = document.getElementById('mapEnvWarnings') || document.getElementById('lookupResult');
   try {
     const d = 0.012; // ~1km bbox
     const url = `https://geodienste.ch/db/kataster_belasteter_standorte_v1_5_0/deu/ogcapi/collections/belastete_standorte_punkte/items?f=json&limit=5&bbox=${lon-d},${lat-d},${lon+d},${lat+d}`;
@@ -1006,6 +1261,7 @@ async function checkKBS(lat, lon, resultEl) {
 
 // Check for protected trees via Swisstopo (BAFU biodiversity layer)
 async function checkProtectedTrees(lat, lon, resultEl) {
+  if (!resultEl) resultEl = document.getElementById('mapEnvWarnings') || document.getElementById('lookupResult');
   try {
     // Use Swisstopo identify API for nature protection objects
     const x = lon, y = lat;
