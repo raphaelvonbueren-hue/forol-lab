@@ -322,7 +322,6 @@ button{font-family:'Inter',sans-serif;padding:0.65rem 1.25rem;border:none;border
 }
 </style>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
 </head>
 <body>
 <div class="loading-overlay" id="loader">
@@ -1172,18 +1171,8 @@ function selectPLZEntry(plz, name, kt) {
 // ─── MOBILE MAP INIT ────────────────────────────────────────────────────────
 // On mobile, init map immediately so it's ready
 // Init map when Leaflet is ready — works desktop + mobile
-document.addEventListener('DOMContentLoaded', () => {
-  // Init map — retry until Leaflet is loaded
-  let _mapInitAttempts = 0;
-  function tryInitMap() {
-    if (typeof L !== 'undefined' && !_leafletMap) {
-      showParcelMap(47.55, 9.35, null, 11);
-    } else if (_mapInitAttempts++ < 20) {
-      setTimeout(tryInitMap, 200);
-    }
-  }
-  setTimeout(tryInitMap, 300);
-});
+// Map init handled by Leaflet onload callback
+// _initLeafletMap called when Leaflet CDN loads
 
 // ─── TAB SWITCHER ──────────────────────────────────────────────────────────
 function switchSearchTab(tab) {
@@ -1293,7 +1282,7 @@ async function searchAddress() {
 }
 
 // ─── PARCEL MAP WITH SWISSTOPO ORTHOFOTO ───────────────────────────────────
-let _leafletMap = null;
+window._leafletMap = null;
 
 function showParcelMap(lat, lon, label, zoom) {
   const wrap = document.getElementById('parcelMapWrap');
@@ -1302,9 +1291,9 @@ function showParcelMap(lat, lon, label, zoom) {
   if (ph) ph.remove();
   setTimeout(() => wrap.scrollIntoView({behavior:'smooth', block:'nearest'}), 200);
 
-  if (_leafletMap) { _leafletMap.remove(); _leafletMap = null; }
+  if (window._leafletMap) { window._leafletMap.remove(); window._leafletMap = null; }
 
-  _leafletMap = L.map('parcelMap', { zoomControl:true, attributionControl:true });
+  window._leafletMap = L.map('parcelMap', { zoomControl:true, attributionControl:true });
 
   // Swisstopo SWISSIMAGE Orthofoto
   L.tileLayer('https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.swissimage/default/current/3857/{z}/{x}/{y}.jpeg', {
@@ -1318,7 +1307,7 @@ function showParcelMap(lat, lon, label, zoom) {
     errorTileUrl: '' // suppress 404s on low zoom
   }).addTo(_leafletMap);
 
-  _leafletMap.setView([lat, lon], zoom || 17);
+  window._leafletMap.setView([lat, lon], zoom || 17);
 
   // Marker
   if (label) {
@@ -1327,7 +1316,7 @@ function showParcelMap(lat, lon, label, zoom) {
       html: `<div style="width:16px;height:16px;background:#e53935;border:2.5px solid white;border-radius:50%;box-shadow:0 0 0 4px rgba(229,57,53,0.3)"></div>`,
       iconSize:[16,16], iconAnchor:[8,8]
     });
-    L.marker([lat, lon], {icon}).addTo(_leafletMap)
+    L.marker([lat, lon], {icon}).addTo(window._leafletMap)
       .bindPopup(`<strong>${label}</strong>`).openPopup();
   }
 
@@ -1419,7 +1408,7 @@ async function identifyParcelAtClick(lat, lon) {
         html:`<div style="width:22px;height:22px;background:#ff6d00;border:3px solid white;border-radius:50%;box-shadow:0 0 0 4px rgba(255,109,0,0.35);animation:pulse 1.5s infinite"></div>`,
         iconSize:[22,22], iconAnchor:[11,11]
       });
-      window._clickMarker = L.marker([lat,lon],{icon:clickIcon}).addTo(_leafletMap)
+      window._clickMarker = L.marker([lat,lon],{icon:clickIcon}).addTo(window._leafletMap)
         .bindPopup(addrStr).openPopup();
     }
   } catch(e) {
@@ -3683,5 +3672,16 @@ function updateProjectCount() {
   }
 }
 </script>
+<script>
+// Leaflet loaded — init map now
+function _initLeafletMap() {
+  if (typeof L === 'undefined') return;
+  if (window._leafletMap) return; // already done
+  // Use global var name matching the app code
+  showParcelMap(47.55, 9.35, null, 11);
+}
+</script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""
+  onload="_initLeafletMap()"></script>
 </body>
 </html>
