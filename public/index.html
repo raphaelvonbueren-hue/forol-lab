@@ -1966,27 +1966,34 @@ async function lookupParcel() {
   await delay(200);
   unload();
 
-  out.innerHTML = `
-    <div style="background:#fff8e1;border-left:4px solid #ff9800;border-radius:8px;padding:1rem;margin-top:1rem">
-      <strong>ℹ️ Parzelle ${num} in ${selectedPLZ[1]} (${selectedPLZ[2]}) nicht online gefunden</strong>
-      <div style="font-size:0.85rem;color:var(--gt);margin-top:0.5rem;line-height:1.5">
-        Die Kantone haben ihre Parzellen-Nummern unterschiedlich publiziert.
-        Für <strong>${selectedPLZ[2]}</strong> ist die direkte Nummernsuche nicht zuverlässig verfügbar.
-        <br><br>
-        <strong>Bitte nutzen Sie die Adresssuche oben:</strong> Klick auf die Karte identifiziert
-        die Parzelle automatisch mit Nummer, Fläche und Geometrie via Swisstopo.
-      </div>
-      <div style="margin-top:0.75rem;display:flex;gap:0.5rem;flex-wrap:wrap">
-        <button class="btn-red"
-          onclick="document.getElementById('addrInput').focus();document.getElementById('addrInput').scrollIntoView({behavior:'smooth',block:'center'})"
-          style="font-size:0.85rem">
-          📍 Zur Adresssuche
-        </button>
-        <button class="btn-white" onclick="goTo('surfaces')" style="font-size:0.85rem">
-          ✏️ Manuell eingeben
-        </button>
-      </div>
-    </div>`;
+  // Show not-found with attempts debug
+  try {
+    const r = await fetch('/api/geoportal', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({action:'parcel_search', params:{municipality:selectedPLZ[1], parcelNumber:num, canton:selectedPLZ[2]}})
+    });
+    const d = await r.json();
+    const attemptsInfo = d.attempts ? `<details style="margin-top:0.5rem;font-size:0.75rem;color:var(--gt)"><summary>Debug: ${d.attempts.length} Versuche</summary><pre style="white-space:pre-wrap;word-break:break-all;background:#fff;padding:0.5rem;border-radius:4px;max-height:200px;overflow:auto">${JSON.stringify(d.attempts, null, 2)}</pre></details>` : '';
+
+    out.innerHTML = `
+      <div style="background:#fff8e1;border-left:4px solid #ff9800;border-radius:8px;padding:1rem;margin-top:1rem">
+        <strong>ℹ️ Parzelle ${num} in ${selectedPLZ[1]} (${selectedPLZ[2]}) nicht gefunden</strong>
+        <div style="font-size:0.85rem;color:var(--gt);margin-top:0.5rem;line-height:1.5">
+          4 Such-Strategien probiert: Swisstopo MapServer/find, SearchServer origins=parcel,
+          geodienste.ch WFS, geodienste.ch OGC API.<br>
+          ${d.hint || ''}
+        </div>
+        ${attemptsInfo}
+        <div style="margin-top:0.75rem;display:flex;gap:0.5rem;flex-wrap:wrap">
+          <button class="btn-red"
+            onclick="document.getElementById('addrInput').focus();document.getElementById('addrInput').scrollIntoView({behavior:'smooth',block:'center'})"
+            style="font-size:0.85rem">📍 Zur Adresssuche</button>
+          <button class="btn-white" onclick="goTo('surfaces')" style="font-size:0.85rem">✏️ Manuell eingeben</button>
+        </div>
+      </div>`;
+  } catch(e) {
+    out.innerHTML = `<div class="alert alert-info" style="margin-top:1rem">Fehler: ${e.message}</div>`;
+  }
     // Bei Not-Found nur Karte zentrieren, keine KBS-Umkreis-Suche
     getMunicipalityCoords(selectedPLZ[1], selectedPLZ[2]).then(coords => {
       if (coords) showParcelMap(coords.lat, coords.lon, null, 14);
