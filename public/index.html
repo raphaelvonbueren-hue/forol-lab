@@ -59,11 +59,11 @@ button{font-family:'Inter',sans-serif;padding:0.65rem 1.25rem;border:none;border
 .btn-group{display:flex;gap:0.75rem;margin-top:1.5rem;flex-wrap:wrap}
 
 /* REGION CARDS */
-.regions{display:grid;grid-template-columns:repeat(4,1fr);gap:1rem}
-.rcard{background:white;border:2px solid var(--br);padding:1rem;text-align:center;border-radius:6px;cursor:pointer;transition:all 0.2s}
-.rcard:hover{border-color:var(--red)}
-.rcard.sel{background:var(--red);color:white;border-color:var(--red)}
-.rcard .rfactor{font-size:0.8rem;margin-top:0.3rem;opacity:0.75}
+.regions{display:none}
+.rcard{display:none}
+
+
+
 
 /* BUILDING TABS */
 .btabs{display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:1rem}
@@ -92,8 +92,8 @@ button{font-family:'Inter',sans-serif;padding:0.65rem 1.25rem;border:none;border
 .parcel-click-title{font-weight:700;color:#1b5e20;font-size:0.92rem;margin-bottom:0.4rem}
 .parcel-click-info{font-size:0.85rem;color:#2e4a2e;line-height:1.6}
 /* PARCEL MAP */
-#parcelMapWrap{margin-top:1rem;border-radius:10px;overflow:hidden;border:2px solid var(--br);display:none;position:relative}
-#parcelMap{height:320px;width:100%}
+#parcelMapWrap{margin-top:1rem;border-radius:10px;overflow:hidden;border:2px solid var(--br);position:relative;background:#e8eaf0}
+#parcelMap{height:320px;width:100%;background:#e8eaf0;display:flex;align-items:center;justify-content:center}
 .map-badge{position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:999;background:rgba(0,0,0,0.75);color:white;padding:0.25rem 0.75rem;border-radius:20px;font-size:0.75rem;pointer-events:none;white-space:nowrap}
 .kbs-warning{background:#fff3e0;border:2px solid #ff6d00;border-radius:8px;padding:0.9rem 1.1rem;margin-top:0.75rem;display:flex;align-items:flex-start;gap:0.7rem}
 .kbs-warning-icon{font-size:1.6rem;flex-shrink:0;margin-top:0.1rem}
@@ -197,9 +197,7 @@ button{font-family:'Inter',sans-serif;padding:0.65rem 1.25rem;border:none;border
   label{font-size:0.83rem}
 
   /* ── Regions (Kantons-Karten) → 2 Spalten ── */
-  .regions{grid-template-columns:repeat(2,1fr);gap:0.6rem}
-  .rcard{padding:0.75rem 0.5rem;font-size:0.82rem}
-  .rcard .rfactor{font-size:0.72rem}
+
 
   /* ── Building tabs ── */
   .btabs{gap:0.35rem}
@@ -445,9 +443,9 @@ button{font-family:'Inter',sans-serif;padding:0.65rem 1.25rem;border:none;border
         </div>
 
         <!-- KARTE (immer sichtbar unter beiden Tabs) -->
-        <div id="parcelMapWrap" style="margin-top:1rem">
+        <div id="parcelMapWrap">
           <div class="map-badge" id="mapBadge">🛰️ Swisstopo Orthofoto · Klicken Sie auf eine Parzelle</div>
-          <div id="parcelMap" style="min-height:260px"></div>
+          <div id="parcelMap" style="min-height:260px"><div id="mapPlaceholder" style="color:#9e9e9e;font-size:0.85rem;text-align:center;pointer-events:none;padding:1rem">🗺️ Adresse eingeben oder Karte berühren</div></div>
         </div>
         <div id="mapEnvWarnings"></div>
       </div>
@@ -494,15 +492,7 @@ button{font-family:'Inter',sans-serif;padding:0.65rem 1.25rem;border:none;border
         </div>
       </div>
 
-      <div class="card">
-        <div class="card-title">Region &amp; Preisfaktor</div>
-        <div class="regions">
-          <div class="rcard sel" data-r="TG" onclick="selRegion(this,'TG',1.00)"><strong>Thurgau</strong><div class="rfactor">Faktor 1.00</div></div>
-          <div class="rcard" data-r="SG" onclick="selRegion(this,'SG',1.05)"><strong>St. Gallen</strong><div class="rfactor">Faktor 1.05</div></div>
-          <div class="rcard" data-r="AI" onclick="selRegion(this,'AI',1.08)"><strong>Appenzell I.Rh.</strong><div class="rfactor">Faktor 1.08</div></div>
-          <div class="rcard" data-r="AR" onclick="selRegion(this,'AR',1.03)"><strong>Appenzell A.Rh.</strong><div class="rfactor">Faktor 1.03</div></div>
-        </div>
-      </div>
+<!-- Region auto from PLZ/Adresse -->
 
       <div class="card">
         <div class="card-title">Projekttyp</div>
@@ -521,6 +511,13 @@ button{font-family:'Inter',sans-serif;padding:0.65rem 1.25rem;border:none;border
       </div>
 
       <div class="btn-group">
+        <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;margin-bottom:0.75rem">
+          <span style="font-size:0.82rem;color:var(--gt)">📍 Region erkannt:</span>
+          <span id="regionBadge" style="font-size:0.82rem;font-weight:600;background:#fff3e0;color:#e65100;padding:0.25rem 0.65rem;border-radius:12px;border:1px solid #ffcc80">
+            TG · Faktor ×1.00
+          </span>
+          <span style="font-size:0.75rem;color:var(--gt)">(wird automatisch aus Adresse/PLZ gesetzt)</span>
+        </div>
         <button class="btn-red" onclick="goTo('surfaces')">Weiter zu Gebäude &amp; Flächen →</button>
       </div>
     </div>
@@ -1161,25 +1158,25 @@ function selectPLZEntry(plz, name, kt) {
   document.getElementById('plzResult').innerHTML =
     `<strong>${name}</strong> <span class="badge badge-${kt==='AI'?'red':kt==='AR'?'blue':'green'}">${kt}</span>`;
   document.getElementById('plzMatches').innerHTML = '';
-  // Auto-set region
+  // Auto-set region factor from canton (no UI card needed)
   const rf = {TG:1.00,SG:1.05,AI:1.08,AR:1.03}[kt]||1.00;
-  document.querySelectorAll('.rcard').forEach(c=>c.classList.remove('sel'));
-  const rc = document.querySelector(`.rcard[data-r="${kt}"]`);
-  if (rc) { rc.classList.add('sel'); S.region=kt; S.rf=rf; }
+  S.region=kt; S.rf=rf;
+  // Show subtle confirmation
+  const rfBadge = document.getElementById('regionBadge');
+  if (rfBadge) rfBadge.textContent = `${kt} · Faktor ×${rf}`;
 }
 
 
 // ─── MOBILE MAP INIT ────────────────────────────────────────────────────────
 // On mobile, init map immediately so it's ready
-if (window.innerWidth <= 768) {
-  window.addEventListener('load', () => {
-    const wrap = document.getElementById('parcelMapWrap');
-    if (wrap && !_leafletMap) {
-      wrap.style.display = 'block';
-      setTimeout(() => showParcelMap(47.55, 9.35, null, 11), 300);
+// Init map when Leaflet is ready — works desktop + mobile
+document.addEventListener('DOMContentLoaded', () => {
+  setTimeout(() => {
+    if (typeof L !== 'undefined' && !_leafletMap) {
+      showParcelMap(47.55, 9.35, null, 11);
     }
-  });
-}
+  }, 400);
+});
 
 // ─── TAB SWITCHER ──────────────────────────────────────────────────────────
 function switchSearchTab(tab) {
@@ -1253,6 +1250,8 @@ function selectAddressSuggestion(lat, lon, label) {
   showParcelMap(lat, lon, label, 18);
   // Auto-identify the parcel at this address
   setTimeout(() => identifyParcelAtClick(lat, lon), 600);
+  // Auto-set region factor from coords
+  autoSetRegionFromCoords(lat, lon);
   // KBS check
   const envDiv = document.getElementById('mapEnvWarnings');
   if (envDiv) envDiv.innerHTML = '';
@@ -1291,7 +1290,9 @@ let _leafletMap = null;
 
 function showParcelMap(lat, lon, label, zoom) {
   const wrap = document.getElementById('parcelMapWrap');
-  wrap.style.display = 'block';
+  // Remove placeholder
+  const ph = document.getElementById('mapPlaceholder');
+  if (ph) ph.remove();
   setTimeout(() => wrap.scrollIntoView({behavior:'smooth', block:'nearest'}), 200);
 
   if (_leafletMap) { _leafletMap.remove(); _leafletMap = null; }
@@ -1419,10 +1420,8 @@ async function identifyParcelAtClick(lat, lon) {
 // Apply clicked position to project
 function useClickedPosition(lat, lon, addr, area) {
   if (area > 0) document.getElementById('parcelArea').value = area;
-  // Set region based on municipality lookup
-  getMunicipalityCoords(addr.split(',').pop().trim(), '').then(m => {
-    if (m?.lat) {/* already have coords */}
-  });
+  // Auto-set region factor from reverse geocoded canton
+  autoSetRegionFromCoords(lat, lon);
   // Show elevation in result
   document.getElementById('lookupResult').innerHTML = `
     <div style="background:linear-gradient(135deg,#1565c0,#0d47a1);color:white;border-radius:8px;padding:0.9rem 1.1rem;margin-top:0.5rem">
@@ -2414,7 +2413,7 @@ function buildBKP() {
   document.getElementById('bkpHeaderSub').textContent =
     `${totalCnt} Positionen kalkuliert · `
     + (aiCnt ? `${aiCnt}× aus KI-Plan · ` : '')
-    + `Region ${S.region} (×${S.rf})`
+    + `Region: ${S.region} (Faktor auto)`
     + (isMulti ? ` · ${nb} Gebäude` : '');
 }
 
@@ -2458,7 +2457,7 @@ function buildSummary() {
       <div><span style="font-size:0.8rem;color:var(--gt)">Projekt</span><br><strong>${document.getElementById('projName').value||'–'}</strong></div>
       <div><span style="font-size:0.8rem;color:var(--gt)">Bauherr</span><br><strong>${document.getElementById('projClient').value||'–'}</strong></div>
       <div><span style="font-size:0.8rem;color:var(--gt)">Standort</span><br><strong>${document.getElementById('projLocation').value||'–'}</strong></div>
-      <div><span style="font-size:0.8rem;color:var(--gt)">Region</span><br><strong>${S.region} (×${S.rf})</strong></div>
+      <div><span style="font-size:0.8rem;color:var(--gt)">Region</span><br><strong>${S.region}</strong><br><span style="font-size:0.75rem;color:var(--gt)">Faktor ×${S.rf}</span></div>
     </div>
     ${S.buildings.length>1?`
     <div style="background:var(--bg);padding:1rem;border-radius:6px;border-left:4px solid var(--gn)">
@@ -2862,6 +2861,33 @@ async function sendFOROL() {
   }
 }
 
+
+// ─── AUTO REGION FROM COORDINATES ─────────────────────────────────────────
+async function autoSetRegionFromCoords(lat, lon) {
+  try {
+    const r = await fetch('/api/geoportal', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({action:'municipality_lookup', params:{name: lat+','+lon}})
+    });
+    // Try identify canton via Swisstopo
+    const url = `https://api3.geo.admin.ch/rest/services/ech/SearchServer` +
+      `?searchText=${encodeURIComponent(lat+','+lon)}&type=locations&origins=gg25&sr=4326&lang=de&limit=1`;
+    const r2 = await fetch(url);
+    const data = await r2.json();
+    const label = (data.results?.[0]?.attrs?.label||'').replace(/<[^>]*>/g,'');
+    // Extract canton from label like "Romanshorn (TG)"
+    const ktMatch = label.match(/\(([A-Z]{2})\)/);
+    if (ktMatch) {
+      const kt = ktMatch[1];
+      const rf = {TG:1.00,SG:1.05,AI:1.08,AR:1.03}[kt];
+      if (rf) {
+        S.region = kt; S.rf = rf;
+        const badge = document.getElementById('regionBadge');
+        if (badge) badge.textContent = `${kt} · Faktor ×${rf}`;
+      }
+    }
+  } catch(e) { /* silent */ }
+}
 // ─── NAVIGATION: EXTEND goTo ─────────────────────────────────────────────
 const _origGoTo = goTo;
 function goTo(page) {
