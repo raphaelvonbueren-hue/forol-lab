@@ -118,6 +118,8 @@ button{font-family:'Inter',sans-serif;padding:0.65rem 1.25rem;border:none;border
   .parcel-search-grid button{width:100%;margin-top:0.25rem}
   .addr-search-grid{grid-template-columns:1fr !important}
   .addr-search-grid button{width:100%;margin-top:0.25rem}
+  .addr-split-grid{grid-template-columns:1fr !important}
+  .addr-split-grid button{width:100%}
 }
 .addr-suggestion{padding:0.6rem 0.9rem;border-radius:6px;cursor:pointer;font-size:0.88rem;display:flex;align-items:center;gap:0.6rem;transition:background 0.15s}
 .addr-suggestion:hover{background:#f0f0f0}
@@ -435,12 +437,16 @@ button{font-family:'Inter',sans-serif;padding:0.65rem 1.25rem;border:none;border
         <!-- ADRESSSUCHE - immer sichtbar -->
         <div style="background:#f9f9f9;border:1px solid var(--br);border-radius:8px;padding:1rem;margin-bottom:1rem">
           <label style="display:block;font-weight:600;font-size:0.85rem;margin-bottom:0.5rem">
-            📍 Adresse (Strasse, Ort)
+            📍 Adresse
           </label>
-          <div style="display:flex;gap:0.5rem">
-            <input id="addrInput" placeholder="z.B. Hauptstrasse 12, Romanshorn"
-              style="flex:1;padding:0.75rem;font-size:1rem;min-height:44px"
-              oninput="onAddrInput(this.value)"
+          <div class="addr-split-grid" style="display:grid;grid-template-columns:2fr 1.3fr auto;gap:0.5rem;align-items:stretch">
+            <input id="addrStreet" placeholder="Strasse + Nr. (z.B. Hauptstrasse 12)"
+              style="padding:0.75rem;font-size:1rem;min-height:44px"
+              oninput="onAddrInput()"
+              onkeydown="if(event.key==='Enter')searchAddress()">
+            <input id="addrCity" placeholder="PLZ oder Ort (z.B. Romanshorn)"
+              style="padding:0.75rem;font-size:1rem;min-height:44px"
+              oninput="onAddrInput()"
               onkeydown="if(event.key==='Enter')searchAddress()">
             <button type="button" class="btn-red" onclick="searchAddress()"
               style="min-height:44px;padding:0 1.25rem;white-space:nowrap">
@@ -1200,23 +1206,32 @@ function switchSearchTab(tab) {
   }
 }
 
-// ─── ADDRESS SEARCH ────────────────────────────────────────────────────────
+// ─── ADDRESS SEARCH (Strasse + Ort getrennt) ───────────────────────────────
 let _addrTimeout = null;
 
-function onAddrInput(val) {
+// Kombiniert Strasse + Ort zu einem Query-String
+function buildAddressQuery() {
+  const street = (document.getElementById('addrStreet')?.value || '').trim();
+  const city = (document.getElementById('addrCity')?.value || '').trim();
+  if (street && city) return `${street}, ${city}`;
+  return street || city;
+}
+
+function onAddrInput() {
   clearTimeout(_addrTimeout);
-  if (val.length < 3) { hideSuggestions(); return; }
-  _addrTimeout = setTimeout(() => fetchAddressSuggestions(val), 300);
+  const query = buildAddressQuery();
+  if (query.length < 3) { hideSuggestions(); return; }
+  _addrTimeout = setTimeout(() => fetchAddressSuggestions(query), 300);
 }
 
 async function fetchAddressSuggestions(query) {
   try {
     const url = `https://api3.geo.admin.ch/rest/services/ech/SearchServer` +
-      `?searchText=${encodeURIComponent(query)}&type=locations&origins=address,street&sr=4326&lang=de&limit=6`;
+      `?searchText=${encodeURIComponent(query)}&type=locations&origins=address,street&sr=4326&lang=de&limit=8`;
     const r = await fetch(url);
     if (!r.ok) { hideSuggestions(); return; }
     const data = await r.json();
-    const results = data.results || [];
+    const results = (data.results || []).filter(x => x.attrs?.lat && x.attrs?.lon);
     showSuggestions(results);
   } catch(e) { hideSuggestions(); }
 }
@@ -1225,12 +1240,13 @@ function showSuggestions(results) {
   const box = document.getElementById('addrSuggestions');
   if (!results.length) { hideSuggestions(); return; }
   box.style.display = 'block';
-  box.innerHTML = results.map((r, i) => {
+  box.innerHTML = results.map((r) => {
     const a = r.attrs || {};
     const label = (a.label || '').replace(/<[^>]*>/g, '');
     const detail = a.detail || '';
     const icon = a.origin === 'address' ? '🏠' : '🛣️';
-    return `<div class="addr-suggestion" onclick="selectAddressSuggestion(${a.lat},${a.lon},'${label.replace(/'/g,"\'")}')">
+    const safeLabel = label.replace(/'/g, "\\'");
+    return `<div class="addr-suggestion" onclick="selectAddressSuggestion(${a.lat},${a.lon},'${safeLabel}')">
       <span class="addr-suggestion-icon">${icon}</span>
       <div>
         <div class="addr-suggestion-main">${label}</div>
@@ -1242,62 +1258,105 @@ function showSuggestions(results) {
 
 function hideSuggestions() {
   const box = document.getElementById('addrSuggestions');
+  if (!box) return;
   box.style.display = 'none';
   box.innerHTML = '';
 }
 
 function selectAddressSuggestion(lat, lon, label) {
   hideSuggestions();
-  document.getElementById('addrInput').value = label;
-  document.getElementById('addrResult').innerHTML = '';
-  // Fly map to address and trigger parcel identify
+  // Teile Label auf: "Hauptstrasse 12, 8590 Romanshorn" oder "Hauptstrasse 12 8590 Romanshorn"
+  const commaParts = label.split(',');
+  const streetEl = document.getElementById('addrStreet');
+  const cityEl = document.getElementById('addrCity');
+  if (commaParts.length >= 2) {
+    if (streetEl) streetEl.value = commaParts[0].trim();
+    if (cityEl) cityEl.value = commaParts.slice(1).join(',').trim();
+  } else {
+    // Kein Komma: an PLZ-Grenze teilen
+    const plzMatch = label.match(/^(.*?)\s+(\d{4}\s+.+)$/);
+    if (plzMatch) {
+      if (streetEl) streetEl.value = plzMatch[1].trim();
+      if (cityEl) cityEl.value = plzMatch[2].trim();
+    } else if (streetEl) {
+      streetEl.value = label;
+    }
+  }
+  const addrResult = document.getElementById('addrResult');
+  if (addrResult) addrResult.innerHTML = '';
+
   showParcelMap(lat, lon, label, 18);
-  // Auto-identify the parcel at this address
   setTimeout(() => identifyParcelAtClick(lat, lon), 600);
-  // Auto-set region factor from coords
   autoSetRegionFromCoords(lat, lon);
-  // Clear env warnings — identifyParcelAtClick will add parcel-specific ones
   const envDiv = document.getElementById('mapEnvWarnings');
   if (envDiv) envDiv.innerHTML = '';
 }
 
 async function searchAddress() {
-  const val = document.getElementById('addrInput').value.trim();
-  if (!val) return;
+  const street = (document.getElementById('addrStreet')?.value || '').trim();
+  const city = (document.getElementById('addrCity')?.value || '').trim();
+  if (!street && !city) return;
+
   hideSuggestions();
-  document.getElementById('addrResult').innerHTML =
+  const addrResult = document.getElementById('addrResult');
+  if (addrResult) addrResult.innerHTML =
     `<div style="color:var(--gt);font-size:0.85rem;padding:0.5rem 0">⏳ Suche läuft…</div>`;
+
+  // Query-Varianten probieren (von spezifisch zu allgemein)
+  const queries = [];
+  if (street && city) {
+    queries.push(`${street}, ${city}`);
+    queries.push(`${street} ${city}`);
+  }
+  if (street) queries.push(street);
+  if (city) queries.push(city);
+
   try {
-    // Use same origins + larger limit as autocomplete; take first result with lat/lon
-    const url = `https://api3.geo.admin.ch/rest/services/ech/SearchServer` +
-      `?searchText=${encodeURIComponent(val)}&type=locations&origins=address,street&sr=4326&lang=de&limit=6`;
-    const r = await fetch(url);
-    const data = await r.json();
-    const results = data.results || [];
-    // Take first result with valid coordinates
-    const hit = results.find(x => x.attrs?.lat && x.attrs?.lon)?.attrs;
-    if (!hit) {
-      // Fallback: try with zipcode origin
-      const url2 = `https://api3.geo.admin.ch/rest/services/ech/SearchServer` +
-        `?searchText=${encodeURIComponent(val)}&type=locations&origins=address,street,zipcode,gg25&sr=4326&lang=de&limit=10`;
-      const r2 = await fetch(url2);
-      const d2 = await r2.json();
-      const hit2 = (d2.results || []).find(x => x.attrs?.lat && x.attrs?.lon)?.attrs;
-      if (!hit2) {
-        document.getElementById('addrResult').innerHTML =
-          `<div class="alert alert-info" style="margin-top:0.5rem">Adresse nicht gefunden. Versuchen Sie: Strasse + Ort, PLZ + Ort, oder nur den Ortsnamen.</div>`;
-        return;
+    let hit = null;
+
+    for (const q of queries) {
+      const url = `https://api3.geo.admin.ch/rest/services/ech/SearchServer` +
+        `?searchText=${encodeURIComponent(q)}&type=locations&origins=address,street&sr=4326&lang=de&limit=10`;
+      const r = await fetch(url);
+      if (!r.ok) continue;
+      const data = await r.json();
+      const results = (data.results || []).filter(x => x.attrs?.lat && x.attrs?.lon);
+      if (!results.length) continue;
+
+      // Wenn city angegeben: bevorzuge Treffer deren Label die city enthält
+      if (city && results.length > 1) {
+        const cityLower = city.toLowerCase();
+        hit = results.find(rr => (rr.attrs.label || '').toLowerCase().includes(cityLower))?.attrs
+           || results[0].attrs;
+      } else {
+        hit = results[0].attrs;
       }
-      const label2 = (hit2.label || '').replace(/<[^>]*>/g, '');
-      document.getElementById('addrResult').innerHTML = '';
-      selectAddressSuggestion(hit2.lat, hit2.lon, label2);
+      if (hit) break;
+    }
+
+    // Fallback: breitere Origins
+    if (!hit) {
+      const q = queries[0] || (street || city);
+      const url2 = `https://api3.geo.admin.ch/rest/services/ech/SearchServer` +
+        `?searchText=${encodeURIComponent(q)}&type=locations&origins=address,street,zipcode,gg25&sr=4326&lang=de&limit=10`;
+      const r2 = await fetch(url2);
+      if (r2.ok) {
+        const d2 = await r2.json();
+        hit = (d2.results || []).find(x => x.attrs?.lat && x.attrs?.lon)?.attrs;
+      }
+    }
+
+    if (!hit) {
+      if (addrResult) addrResult.innerHTML =
+        `<div class="alert alert-info" style="margin-top:0.5rem">Adresse nicht gefunden. Prüfen Sie die Schreibweise oder geben Sie nur PLZ + Ort ein.</div>`;
       return;
     }
+
     const label = (hit.label || '').replace(/<[^>]*>/g, '');
-    document.getElementById('addrResult').innerHTML = '';
+    if (addrResult) addrResult.innerHTML = '';
     selectAddressSuggestion(hit.lat, hit.lon, label);
   } catch(e) {
-    document.getElementById('addrResult').innerHTML =
+    if (addrResult) addrResult.innerHTML =
       `<div class="alert alert-info" style="margin-top:0.5rem">Fehler bei der Suche: ${e.message}</div>`;
   }
 }
@@ -2076,7 +2135,7 @@ async function lookupParcel() {
         ${attemptsInfo}
         <div style="margin-top:0.75rem;display:flex;gap:0.5rem;flex-wrap:wrap">
           <button class="btn-red"
-            onclick="document.getElementById('addrInput').focus();document.getElementById('addrInput').scrollIntoView({behavior:'smooth',block:'center'})"
+            onclick="document.getElementById('addrStreet').focus();document.getElementById('addrStreet').scrollIntoView({behavior:'smooth',block:'center'})"
             style="font-size:0.85rem">📍 Zur Adresssuche</button>
           <button class="btn-white" onclick="goTo('surfaces')" style="font-size:0.85rem">✏️ Manuell eingeben</button>
         </div>
