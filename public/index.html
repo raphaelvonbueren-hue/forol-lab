@@ -210,6 +210,8 @@ button{font-family:'Inter',sans-serif;padding:0.65rem 1.25rem;border:none;border
 .spinner{width:36px;height:36px;border:3px solid #f3f3f3;border-top:3px solid var(--red);border-radius:50%;animation:spin 0.9s linear infinite;margin:0 auto 1rem}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes pulse{0%,100%{box-shadow:0 0 0 4px rgba(255,109,0,0.35)}50%{box-shadow:0 0 0 8px rgba(255,109,0,0.15)}}
+@keyframes parcel-dash{to{stroke-dashoffset:-32}}
+.parcel-pulse{animation:parcel-dash 1.5s linear infinite}
 
 /* MOBILE */
 /* ═══════════════════════════════════════
@@ -1498,9 +1500,9 @@ async function identifyParcelAtClick(lat, lon) {
       // Show combined parcels if any
       renderCombinedParcels();
 
-      // Draw parcel outline if geometry available
-      if (parcelGeometry && parcelGeometry.rings) {
-        drawParcelOutline(parcelGeometry.rings[0]);
+      // Parzelle zeichnen + sanft zoomen
+      if (parcelGeometry?.rings?.[0]) {
+        drawParcelOutline(parcelGeometry.rings[0], {fit:true});
       }
     }
   } catch(e) {
@@ -1630,9 +1632,11 @@ function pointInPolygon(point, polygon) {
   return inside;
 }
 
-// ─── PARZELLEN-OUTLINE ZEICHNEN ────────────────────────────────────────────
-function drawParcelOutline(ring) {
-  if (!window._leafletMap || !ring) return;
+// ─── PARZELLEN-OUTLINE ZEICHNEN + AUTO-ZOOM ────────────────────────────────
+function drawParcelOutline(ring, opts) {
+  opts = opts || {};
+  if (!window._leafletMap || !ring || ring.length < 3) return;
+  // Alte Parzelle entfernen
   if (window._parcelPoly) {
     try { window._leafletMap.removeLayer(window._parcelPoly); } catch(e) {}
     window._parcelPoly = null;
@@ -1640,8 +1644,43 @@ function drawParcelOutline(ring) {
   // Ring ist [lon, lat] → Leaflet braucht [lat, lon]
   const latlngs = ring.map(p => [p[1], p[0]]);
   window._parcelPoly = L.polygon(latlngs, {
-    color:'#e53935', weight:3, fillColor:'#e53935', fillOpacity:0.15
+    color:'#e53935',      // kräftiges Rot
+    weight: 4,             // deutlicher Rand
+    opacity: 1,
+    fillColor:'#e53935',
+    fillOpacity: 0.18,
+    dashArray: null,
+    lineJoin:'round'
   }).addTo(window._leafletMap);
+
+  // Pulsierender Highlight-Effekt
+  if (window._parcelPulse) {
+    try { window._leafletMap.removeLayer(window._parcelPulse); } catch(e) {}
+  }
+  window._parcelPulse = L.polygon(latlngs, {
+    color:'#ff1744',
+    weight: 2,
+    opacity: 0.6,
+    fillOpacity: 0,
+    dashArray: '8, 8',
+    className: 'parcel-pulse'
+  }).addTo(window._leafletMap);
+
+  // Auto-Zoom: fitBounds mit Padding
+  if (opts.fit !== false) {
+    const bounds = window._parcelPoly.getBounds();
+    window._leafletMap.flyToBounds(bounds, {
+      padding: [40, 40],
+      maxZoom: 19,
+      duration: 0.8,
+      animate: true
+    });
+  }
+
+  // Sicherstellen dass nach Animation alles korrekt gerendert wird
+  setTimeout(() => {
+    if (window._leafletMap) window._leafletMap.invalidateSize(true);
+  }, 900);
 }
 
 // ─── PARZELLEN-KOMBINATION ────────────────────────────────────────────────
@@ -1914,10 +1953,14 @@ async function lookupParcel() {
         const recFloors = 2;
         const dim = area > 0 ? Math.round(Math.sqrt(maxFP / recFloors)) : 0;
 
-        // Zeige Karte auf Parzelle
+        // Zeige Karte auf Parzelle mit optimalem Zoom via fitBounds
         if (data.lat && data.lon) {
-          showParcelMap(data.lat, data.lon, `Parzelle ${data.number||num} · ${selectedPLZ[1]}`, 18);
-          if (geometry?.rings) drawParcelOutline(geometry.rings[0]);
+          // Base map init bei ersten Koordinaten
+          showParcelMap(data.lat, data.lon, `Parzelle ${data.number||num}`, 17);
+          // Dann Parzelle zeichnen (macht automatisch fitBounds)
+          if (geometry?.rings?.[0]) {
+            setTimeout(() => drawParcelOutline(geometry.rings[0], {fit:true}), 200);
+          }
         }
 
         // KBS-Warnung nur wenn Treffer
