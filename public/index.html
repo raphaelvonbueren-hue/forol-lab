@@ -1633,6 +1633,28 @@ function pointInPolygon(point, polygon) {
 }
 
 // ─── PARZELLEN-OUTLINE ZEICHNEN + AUTO-ZOOM ────────────────────────────────
+// ─── GEOJSON → ESRI RINGS KONVERTER ──────────────────────────────────────
+// Backend liefert Parzellen-Geometrie als GeoJSON:
+//   { type: 'Polygon', coordinates: [[[lon,lat],...]] }
+//   { type: 'MultiPolygon', coordinates: [[[[lon,lat],...]], ...] }
+// Frontend-Helpers (calcParcelSlope, checkKBSOnParcel, drawParcelOutline)
+// erwarten Esri-Format: { rings: [[[lon,lat],...], ...] }
+function geoJsonToEsriRings(geoJson) {
+  if (!geoJson) return null;
+  if (geoJson.rings) return geoJson;  // schon Esri-Format
+
+  let rings = [];
+  if (geoJson.type === 'Polygon' && Array.isArray(geoJson.coordinates)) {
+    rings = geoJson.coordinates;
+  } else if (geoJson.type === 'MultiPolygon' && Array.isArray(geoJson.coordinates)) {
+    // Alle Ringe aus allen Polygons zusammenfassen
+    geoJson.coordinates.forEach(poly => {
+      poly.forEach(ring => rings.push(ring));
+    });
+  }
+  return rings.length ? { rings } : null;
+}
+
 function drawParcelOutline(ring, opts) {
   opts = opts || {};
   if (!window._leafletMap || !ring || ring.length < 3) return;
@@ -1920,13 +1942,20 @@ async function lookupParcel() {
     if (r.ok) {
       const data = await r.json();
       if (data.found) {
-        // Wenn wir lat/lon haben, hole Fläche + Geometrie via identify
         let area = data.area || 0;
         let geometry = null;
         let slopeInfo = null;
         let kbsInfo = null;
 
-        if (data.lat && data.lon) {
+        // Das Backend liefert Geometrie als GeoJSON (geometry.coordinates)
+        // Wir brauchen aber Esri-Rings Format für calcParcelSlope/checkKBSOnParcel
+        if (data.geometry) {
+          geometry = geoJsonToEsriRings(data.geometry);
+        }
+
+        // Fallback: wenn Backend keine Geometrie hat, identify am Punkt
+        // ABER nur wenn data.lat/lon wirklich auf der Parzelle liegen
+        if (!geometry && data.lat && data.lon) {
           try {
             const identUrl = `https://api3.geo.admin.ch/rest/services/ech/MapServer/identify`
               + `?geometry=${data.lon},${data.lat}&geometryType=esriGeometryPoint&imageDisplay=500,500,96`
@@ -1937,14 +1966,23 @@ async function lookupParcel() {
             const hit = identData.results?.[0];
             if (hit) {
               const props = hit.properties || hit.attributes || {};
-              area = area || props.area || props.flaeche || props.flaecheninhalt || 0;
-              geometry = hit.geometry || null;
-              if (geometry && geometry.rings) {
-                slopeInfo = await calcParcelSlope(geometry.rings[0]);
-                kbsInfo = await checkKBSOnParcel(geometry);
+              // SAFETY CHECK: identify-Ergebnis muss gleiche Nummer haben!
+              const identNum = String(props.number || props.nummer || props.grundstuecknummer || '');
+              if (!identNum || identNum === String(num)) {
+                area = area || props.area || props.flaeche || props.flaecheninhalt || 0;
+                geometry = hit.geometry || null;
+              } else {
+                // identify hat Nachbarparzelle gefunden → verwerfen
+                console.warn(`identify returned wrong parcel: got ${identNum}, expected ${num}`);
               }
             }
           } catch(e) { /* continue without */ }
+        }
+
+        // Slope und KBS nur mit der KORREKTEN Geometrie
+        if (geometry && geometry.rings) {
+          slopeInfo = await calcParcelSlope(geometry.rings[0]);
+          kbsInfo = await checkKBSOnParcel(geometry);
         }
 
         unload();
@@ -1953,11 +1991,20 @@ async function lookupParcel() {
         const recFloors = 2;
         const dim = area > 0 ? Math.round(Math.sqrt(maxFP / recFloors)) : 0;
 
-        // Zeige Karte auf Parzelle mit optimalem Zoom via fitBounds
-        if (data.lat && data.lon) {
-          // Base map init bei ersten Koordinaten
-          showParcelMap(data.lat, data.lon, `Parzelle ${data.number||num}`, 17);
-          // Dann Parzelle zeichnen (macht automatisch fitBounds)
+        // Zeige Karte auf Parzelle — priorisiere Polygon-Zentrum über data.lat/lon
+        let mapLat = data.lat, mapLon = data.lon;
+        if (geometry?.rings?.[0]) {
+          // Berechne Polygon-Zentrum für Map-Positionierung
+          const ring = geometry.rings[0];
+          const lons = ring.map(p => p[0]);
+          const lats = ring.map(p => p[1]);
+          mapLon = (Math.min(...lons) + Math.max(...lons)) / 2;
+          mapLat = (Math.min(...lats) + Math.max(...lats)) / 2;
+        }
+
+        if (mapLat && mapLon) {
+          showParcelMap(mapLat, mapLon, `Parzelle ${data.number||num}`, 17);
+          // drawParcelOutline macht fitBounds automatisch → korrekter Zoom auf PARZELLE
           if (geometry?.rings?.[0]) {
             setTimeout(() => drawParcelOutline(geometry.rings[0], {fit:true}), 200);
           }
