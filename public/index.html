@@ -1409,67 +1409,31 @@ async function searchAddress() {
       _normalize((topHit.attrs.label||'').replace(/<[^>]*>/g,'')).includes(streetName) : true;
 
     if (!topHit) {
-      // Keine exakten Treffer — versuche Alternativen aus derselben Stadt anzubieten
+      // Keine exakten Adress-Treffer. Hole Ort-Koordinaten via gg25 und
+      // zoome die Karte auf den Ort — User kann dann direkt auf die Karte klicken.
       if (city) {
         const url3 = `https://api3.geo.admin.ch/rest/services/ech/SearchServer` +
-          `?searchText=${encodeURIComponent(city)}&type=locations&origins=address,street&sr=4326&lang=de&limit=15`;
+          `?searchText=${encodeURIComponent(city)}&type=locations&origins=gg25,zipcode&sr=4326&lang=de&limit=5`;
         const r3 = await fetch(url3);
         if (r3.ok) {
           const d3 = await r3.json();
-          const cityLower = _normalize(city);
-          const streetLower = streetName;
-          // Finde Strassen aus der Stadt die ähnlich aussehen wie die gesuchte
-          const cityStreets = (d3.results || [])
-            .filter(x => x.attrs?.lat && x.attrs?.lon && _normalize((x.attrs.label || '').replace(/<[^>]*>/g,'')).includes(cityLower));
-          // Falls User eine Strasse suchte: zeige Vorschläge die den Strasse-Anfang ähnlich haben
-          const ranked = cityStreets.slice().sort((a, b) => {
-            const aLabel = _normalize((a.attrs.label || '').replace(/<[^>]*>/g,''));
-            const bLabel = _normalize((b.attrs.label || '').replace(/<[^>]*>/g,''));
-            // Einfache Prefix-Ähnlichkeit zum Strassenname
-            const aMatch = streetLower ? aLabel.indexOf(streetLower.substring(0, 3)) : 0;
-            const bMatch = streetLower ? bLabel.indexOf(streetLower.substring(0, 3)) : 0;
-            return (aMatch === -1 ? 999 : aMatch) - (bMatch === -1 ? 999 : bMatch);
-          }).slice(0, 6);
-
-          if (ranked.length > 0) {
+          const cityHit = (d3.results || []).find(x => x.attrs?.lat && x.attrs?.lon)?.attrs;
+          if (cityHit) {
             if (addrResult) addrResult.innerHTML =
               `<div class="alert alert-info" style="margin-top:0.5rem;font-size:0.85rem">
-                <strong>"${street}" in ${city} nicht gefunden.</strong><br>
-                Vorschläge aus ${city}:
+                <strong>"${street}" nicht in ${city} gefunden.</strong><br>
+                Die Karte ist auf ${city} zentriert — tippe direkt auf das Haus um die Parzelle auszuwählen.
               </div>`;
-            const box = document.getElementById('addrSuggestions');
-            if (box) {
-              box.style.display = 'block';
-              box.innerHTML = ranked.map(r => {
-                const a = r.attrs || {};
-                const label = (a.label || '').replace(/<[^>]*>/g, '');
-                const safeLabel = label.replace(/'/g, "\\'");
-                return `<div class="addr-suggestion" onclick="selectAddressSuggestion(${a.lat},${a.lon},'${safeLabel}')">
-                  <span class="addr-suggestion-icon">${a.origin === 'address' ? '🏠' : '🛣️'}</span>
-                  <div><div class="addr-suggestion-main">${label}</div></div>
-                </div>`;
-              }).join('');
-            }
+            // Zoom auf Gemeindezentrum
+            showParcelMap(cityHit.lat, cityHit.lon, null, 15);
+            autoSetRegionFromCoords(cityHit.lat, cityHit.lon);
             return;
           }
         }
       }
 
-      // Ganz letzter Fallback: gg25 + zipcode
-      const url2 = `https://api3.geo.admin.ch/rest/services/ech/SearchServer` +
-        `?searchText=${encodeURIComponent(queries[0] || street || city)}&type=locations&origins=address,street,zipcode,gg25&sr=4326&lang=de&limit=10`;
-      const r2 = await fetch(url2);
-      if (r2.ok) {
-        const d2 = await r2.json();
-        const hit2 = (d2.results || []).find(x => x.attrs?.lat && x.attrs?.lon)?.attrs;
-        if (hit2) {
-          if (addrResult) addrResult.innerHTML = '';
-          selectAddressSuggestion(hit2.lat, hit2.lon, (hit2.label || '').replace(/<[^>]*>/g,''));
-          return;
-        }
-      }
       if (addrResult) addrResult.innerHTML =
-        `<div class="alert alert-info" style="margin-top:0.5rem">Adresse nicht gefunden. Klicke direkt auf die Karte oder gib nur den Ort ein.</div>`;
+        `<div class="alert alert-info" style="margin-top:0.5rem">Adresse nicht gefunden. Prüfe die Schreibweise oder klicke direkt auf die Karte.</div>`;
       return;
     }
 
