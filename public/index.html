@@ -430,57 +430,63 @@ button{font-family:'Inter',sans-serif;padding:0.65rem 1.25rem;border:none;border
       <div class="card">
         <div class="card-title">🔍 Grundstück suchen <span class="badge badge-green">AUTO</span></div>
 
-        <!-- Tab switcher -->
-        <div class="search-tabs">
-          <button type="button" id="tabAddrBtn" class="search-tab-btn active" onclick="switchSearchTab('addr')">
-            📍 Adresse
-          </button>
-          <button type="button" id="tabParcelBtn" class="search-tab-btn" onclick="switchSearchTab('parcel')">
-            🔢 Parzellennummer
-          </button>
-        </div>
-
-        <!-- ADRESS-SUCHE -->
-        <div id="tabAddr" class="lookup-box">
-          <div class="addr-search-grid" style="display:grid;grid-template-columns:1fr auto;gap:0.75rem;align-items:end">
-            <div class="fg" style="margin:0">
-              <label>Strasse, Hausnummer, Ort</label>
-              <input id="addrInput" placeholder="z.B. Hauptstrasse 12, Romanshorn"
-                style="font-size:1rem"
-                oninput="onAddrInput(this.value)"
-                onkeydown="if(event.key==='Enter')searchAddress()">
-            </div>
-            <button class="btn-red" onclick="searchAddress()" style="height:fit-content">Suchen</button>
+        <!-- ADRESSSUCHE - immer sichtbar -->
+        <div style="background:#f9f9f9;border:1px solid var(--br);border-radius:8px;padding:1rem;margin-bottom:1rem">
+          <label style="display:block;font-weight:600;font-size:0.85rem;margin-bottom:0.5rem">
+            📍 Adresse (Strasse, Ort)
+          </label>
+          <div style="display:flex;gap:0.5rem">
+            <input id="addrInput" placeholder="z.B. Hauptstrasse 12, Romanshorn"
+              style="flex:1;padding:0.75rem;font-size:1rem;min-height:44px"
+              oninput="onAddrInput(this.value)"
+              onkeydown="if(event.key==='Enter')searchAddress()">
+            <button type="button" class="btn-red" onclick="searchAddress()"
+              style="min-height:44px;padding:0 1.25rem;white-space:nowrap">
+              Suchen
+            </button>
           </div>
           <div id="addrSuggestions" style="margin-top:0.4rem"></div>
           <div id="addrResult"></div>
         </div>
 
-        <!-- PARZELLEN-SUCHE -->
-        <div id="tabParcel" class="lookup-box" style="display:none">
-          <div class="parcel-search-grid" style="display:grid;grid-template-columns:130px 1fr 1fr auto;gap:1rem;align-items:end">
-            <div class="fg">
-              <label>Postleitzahl</label>
-              <input id="pPLZ" placeholder="z.B. 8500" maxlength="4" oninput="onPLZInput(this.value)" style="font-size:1.1rem;font-weight:600;letter-spacing:1px">
+        <!-- PARZELLENSUCHE - immer sichtbar -->
+        <div style="background:#f9f9f9;border:1px solid var(--br);border-radius:8px;padding:1rem;margin-bottom:1rem">
+          <label style="display:block;font-weight:600;font-size:0.85rem;margin-bottom:0.5rem">
+            🔢 Oder: PLZ + Parzellennummer
+          </label>
+          <div class="parcel-search-grid" style="display:grid;grid-template-columns:110px 1fr 1fr auto;gap:0.5rem;align-items:end">
+            <div>
+              <div style="font-size:0.75rem;color:var(--gt);margin-bottom:0.2rem">PLZ</div>
+              <input id="pPLZ" placeholder="8500" maxlength="4"
+                oninput="onPLZInput(this.value)"
+                style="padding:0.75rem;font-size:1rem;min-height:44px;text-align:center">
             </div>
-            <div class="fg">
-              <label>Gemeinde</label>
-              <div id="plzResult" style="padding:0.65rem;border:1px solid var(--br);border-radius:6px;background:#f9f9f9;font-size:0.9rem;min-height:2.5rem;color:var(--gt)">wird automatisch gefüllt</div>
+            <div>
+              <div style="font-size:0.75rem;color:var(--gt);margin-bottom:0.2rem">Gemeinde</div>
+              <div id="plzResult" style="padding:0.7rem;border:1px solid var(--br);border-radius:6px;background:white;font-size:0.85rem;min-height:44px;color:var(--gt);display:flex;align-items:center">—</div>
             </div>
-            <div class="fg">
-              <label>Parzellennummer</label>
-              <input id="pNum" placeholder="z.B. 1234">
+            <div>
+              <div style="font-size:0.75rem;color:var(--gt);margin-bottom:0.2rem">Parzelle</div>
+              <input id="pNum" placeholder="1234"
+                style="padding:0.75rem;font-size:1rem;min-height:44px;text-align:center">
             </div>
-            <button class="btn-red" onclick="lookupParcel()" style="height:fit-content">Suchen</button>
+            <button type="button" class="btn-red" onclick="lookupParcel()"
+              style="min-height:44px;padding:0 1rem">
+              OK
+            </button>
           </div>
           <div id="plzMatches" style="margin-top:0.5rem"></div>
           <div id="lookupResult"></div>
         </div>
 
-        <!-- KARTE (immer sichtbar unter beiden Tabs) -->
+        <!-- KARTE -->
         <div id="parcelMapWrap">
-          <div class="map-badge" id="mapBadge">🛰️ Swisstopo Orthofoto · Klicken Sie auf eine Parzelle</div>
-          <div id="parcelMap" style="min-height:260px"><div id="mapPlaceholder" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#9e9e9e;font-size:0.85rem;text-align:center;pointer-events:none;z-index:1">🗺️ Adresse eingeben</div></div>
+          <div class="map-badge" id="mapBadge">🛰️ Swisstopo · Tippen für Parzelle</div>
+          <div id="parcelMap" style="height:320px;width:100%;background:#e8eaf0">
+            <div id="mapPlaceholder" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#9e9e9e;font-size:0.85rem;text-align:center;pointer-events:none;z-index:1">
+              🗺️ Karte lädt…
+            </div>
+          </div>
         </div>
         <div id="mapEnvWarnings"></div>
       </div>
@@ -1210,20 +1216,8 @@ function selectPLZEntry(plz, name, kt) {
 
 // ─── TAB SWITCHER ──────────────────────────────────────────────────────────
 function switchSearchTab(tab) {
-  const isAddr = tab === 'addr';
-  const tabAddr = document.getElementById('tabAddr');
-  const tabParcel = document.getElementById('tabParcel');
-  const btnAddr = document.getElementById('tabAddrBtn');
-  const btnParcel = document.getElementById('tabParcelBtn');
-  if (!tabAddr || !tabParcel || !btnAddr || !btnParcel) return;
-  tabAddr.style.display   = isAddr ? '' : 'none';
-  tabParcel.style.display = isAddr ? 'none' : '';
-  btnAddr.classList.toggle('active', isAddr);
-  btnParcel.classList.toggle('active', !isAddr);
-  // Ensure map is initialized
-  if (!window._leafletMap && typeof L !== 'undefined' && typeof showParcelMap === 'function') {
-    showParcelMap(47.55, 9.35, null, 11);
-  } else if (window._leafletMap) {
+  // Legacy — tabs removed, both panels always visible
+  if (window._leafletMap) {
     setTimeout(() => window._leafletMap.invalidateSize(true), 100);
   }
 }
@@ -1322,78 +1316,73 @@ window._leafletMap = null;
 window._clickMarker = null;
 
 function showParcelMap(lat, lon, label, zoom) {
-  // Remove placeholder once
+  if (typeof L === 'undefined') {
+    console.warn('Leaflet not ready');
+    return;
+  }
+
+  const container = document.getElementById('parcelMap');
+  if (!container) return;
+
+  // Remove placeholder
   const ph = document.getElementById('mapPlaceholder');
   if (ph) ph.remove();
 
-  // Destroy existing map
+  // Clean existing map
   if (window._leafletMap) {
     try { window._leafletMap.remove(); } catch(e) {}
     window._leafletMap = null;
   }
 
-  // Create map — use OSM as reliable base (Swisstopo requires Swiss Referer)
-  const map = L.map('parcelMap', {
+  // Create fresh map
+  const map = L.map(container, {
     zoomControl: true,
     attributionControl: true,
-    tap: true  // iOS touch fix
-  });
+    tap: true
+  }).setView([lat, lon], zoom || 17);
   window._leafletMap = map;
 
-  // Base layer: Swisstopo SWISSIMAGE (works in browser with Referer)
-  const swissimage = L.tileLayer(
+  // OSM base (always works on mobile, no Referer needed)
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap',
+    maxZoom: 19
+  }).addTo(map);
+
+  // Try Swisstopo orthophoto on top (may not work on all mobiles)
+  const swiss = L.tileLayer(
     'https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.swissimage/default/current/3857/{z}/{x}/{y}.jpeg',
-    { attribution: '© swisstopo', maxZoom: 20 }
+    { attribution: '© swisstopo', maxZoom: 20, opacity: 1 }
   );
+  swiss.addTo(map);
 
-  // Fallback: OSM (always works)
-  const osm = L.tileLayer(
-    'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-    { attribution: '© OpenStreetMap', maxZoom: 19 }
-  );
-
-  // Auto-fallback to OSM if Swisstopo tiles fail
-  let errCount = 0;
-  swissimage.on('tileerror', () => {
-    errCount++;
-    if (errCount >= 2 && !window._osmActive) {
-      window._osmActive = true;
-      try { map.removeLayer(swissimage); } catch(e) {}
-      osm.addTo(map);
-      const badge = document.getElementById('mapBadge');
-      if (badge) badge.textContent = '🗺️ OpenStreetMap';
-    }
-  });
-  swissimage.addTo(map);
-
-  // Parzellengrenzen-Overlay
+  // Parzellengrenzen
   L.tileLayer(
     'https://wmts.geo.admin.ch/1.0.0/ch.swisstopo-vd.amtliche-vermessung/default/current/3857/{z}/{x}/{y}.png',
     { opacity: 0.6, maxZoom: 20, errorTileUrl: '' }
   ).addTo(map);
 
-  map.setView([lat, lon], zoom || 17);
-
-  // CRITICAL: invalidateSize after render (fixes grey map)
+  // CRITICAL: invalidateSize — map container had no size at init
   setTimeout(() => { if (window._leafletMap) window._leafletMap.invalidateSize(true); }, 50);
   setTimeout(() => { if (window._leafletMap) window._leafletMap.invalidateSize(true); }, 300);
   setTimeout(() => { if (window._leafletMap) window._leafletMap.invalidateSize(true); }, 1000);
 
   // Marker
   if (label) {
-    const icon = L.divIcon({
-      className: 'parcel-marker',
-      html: '<div style="width:16px;height:16px;background:#e53935;border:2.5px solid white;border-radius:50%;box-shadow:0 0 0 4px rgba(229,57,53,0.3)"></div>',
-      iconSize: [16, 16],
-      iconAnchor: [8, 8]
-    });
-    L.marker([lat, lon], { icon }).addTo(map)
-      .bindPopup('<strong>' + label + '</strong>')
-      .openPopup();
+    try {
+      const icon = L.divIcon({
+        className: 'parcel-marker',
+        html: '<div style="width:16px;height:16px;background:#e53935;border:2.5px solid white;border-radius:50%;box-shadow:0 0 0 4px rgba(229,57,53,0.3)"></div>',
+        iconSize: [16, 16],
+        iconAnchor: [8, 8]
+      });
+      L.marker([lat, lon], { icon }).addTo(map)
+        .bindPopup('<strong>' + label + '</strong>')
+        .openPopup();
+    } catch(e) { console.warn('marker error', e); }
   }
 
-  // Click handler — identify parcel
-  map.on('click', (e) => {
+  // Click handler
+  map.on('click', function(e) {
     if (typeof identifyParcelAtClick === 'function') {
       identifyParcelAtClick(e.latlng.lat, e.latlng.lng);
     }
@@ -3748,13 +3737,27 @@ function updateProjectCount() {
 <script>
 // Leaflet loaded — init map now
 function _initLeafletMap() {
-  if (typeof L === 'undefined') return;
+  if (typeof L === 'undefined') {
+    console.warn('Leaflet not loaded');
+    return;
+  }
   if (window._leafletMap) return;
-  showParcelMap(47.55, 9.35, null, 11);
-  // Extra invalidateSize for mobile browsers
-  setTimeout(() => { if (window._leafletMap) window._leafletMap.invalidateSize(true); }, 500);
-  setTimeout(() => { if (window._leafletMap) window._leafletMap.invalidateSize(true); }, 1500);
+  try {
+    showParcelMap(47.55, 9.35, null, 11);
+  } catch(e) {
+    console.error('Map init failed:', e);
+    // Show error in map container
+    const ph = document.getElementById('mapPlaceholder');
+    if (ph) ph.textContent = 'Karte konnte nicht geladen werden';
+  }
 }
+
+// Fallback: init after 2s if onload didn't fire
+setTimeout(function() {
+  if (!window._leafletMap && typeof L !== 'undefined') {
+    _initLeafletMap();
+  }
+}, 2000);
 </script>
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.js"
   onload="_initLeafletMap()"></script>
