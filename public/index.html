@@ -321,6 +321,8 @@ button{font-family:'Inter',sans-serif;padding:0.65rem 1.25rem;border:none;border
   .mobile-nav{display:none}
 }
 </style>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
 </head>
 <body>
 <div class="loading-overlay" id="loader">
@@ -1171,11 +1173,16 @@ function selectPLZEntry(plz, name, kt) {
 // On mobile, init map immediately so it's ready
 // Init map when Leaflet is ready — works desktop + mobile
 document.addEventListener('DOMContentLoaded', () => {
-  setTimeout(() => {
+  // Init map — retry until Leaflet is loaded
+  let _mapInitAttempts = 0;
+  function tryInitMap() {
     if (typeof L !== 'undefined' && !_leafletMap) {
       showParcelMap(47.55, 9.35, null, 11);
+    } else if (_mapInitAttempts++ < 20) {
+      setTimeout(tryInitMap, 200);
     }
-  }, 400);
+  }
+  setTimeout(tryInitMap, 300);
 });
 
 // ─── TAB SWITCHER ──────────────────────────────────────────────────────────
@@ -1305,9 +1312,10 @@ function showParcelMap(lat, lon, label, zoom) {
     maxZoom: 20, crossOrigin: true
   }).addTo(_leafletMap);
 
-  // Parzellengrenzen-Overlay (Swisstopo amtliche Karte)
+  // Parzellengrenzen-Overlay (Swisstopo amtliche Vermessung)
   L.tileLayer('https://wmts.geo.admin.ch/1.0.0/ch.swisstopo-vd.amtliche-vermessung/default/current/3857/{z}/{x}/{y}.png', {
-    opacity: 0.55, maxZoom: 20, crossOrigin: true
+    opacity: 0.6, maxZoom: 20, crossOrigin: true,
+    errorTileUrl: '' // suppress 404s on low zoom
   }).addTo(_leafletMap);
 
   _leafletMap.setView([lat, lon], zoom || 17);
@@ -1353,10 +1361,11 @@ async function identifyParcelAtClick(lat, lon) {
     // 3. Municipality at click point
     const munUrl = `https://api3.geo.admin.ch/rest/services/ech/SearchServer?searchText=${lat},${lon}&type=locations&origins=gg25&sr=4326&lang=de&limit=1`;
     // Use reverse lookup via parcel identify
-    const identUrl = `https://api3.geo.admin.ch/rest/services/all/MapServer/identify` +
-      `?geometry=${lon},${lat}&geometryType=esriGeometryPoint&imageDisplay=1000,1000,96` +
-      `&mapExtent=${lon-0.01},${lat-0.01},${lon+0.01},${lat+0.01}` +
-      `&tolerance=3&layers=all:ch.swisstopo-vd.amtliche-vermessung&sr=4326&lang=de&returnGeometry=false`;
+    // Use confirmed Swisstopo identify layer for parcels
+    const identUrl = `https://api3.geo.admin.ch/rest/services/ech/MapServer/identify` +
+      `?geometry=${lon},${lat}&geometryType=esriGeometryPoint&imageDisplay=500,500,96` +
+      `&mapExtent=${lon-0.005},${lat-0.005},${lon+0.005},${lat+0.005}` +
+      `&tolerance=5&layers=all:ch.swisstopo-vd.amtliche-vermessung&sr=4326&lang=de&returnGeometry=false`;
     const identR = await fetch(identUrl);
     const identData = await identR.json();
     const parcelHit = identData.results?.[0];
@@ -1365,9 +1374,11 @@ async function identifyParcelAtClick(lat, lon) {
     const addrStr = addrHit
       ? (addrHit.label||'').replace(/<[^>]*>/g,'')
       : `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
-    const parcelNum = parcelHit?.properties?.egrid || parcelHit?.properties?.number || null;
-    const parcelArea = parcelHit?.properties?.area || null;
-    const municipality = parcelHit?.properties?.gemname || parcelHit?.properties?.municipality || null;
+    // Swisstopo AV identify returns various property names
+    const props = parcelHit?.properties || parcelHit?.attributes || {};
+    const parcelNum = props.egrid || props.EGRID || props.number || props.grundstuecknummer || null;
+    const parcelArea = props.area || props.flaeche || props.flaecheninhalt || null;
+    const municipality = props.gemname || props.gemeindename || props.municipality || props.Gemeindename || null;
 
     // Update badge
     if (badge) badge.textContent = '🛰️ Swisstopo Orthofoto · Klicken Sie auf eine Parzelle';
@@ -2865,25 +2876,24 @@ async function sendFOROL() {
 // ─── AUTO REGION FROM COORDINATES ─────────────────────────────────────────
 async function autoSetRegionFromCoords(lat, lon) {
   try {
-    const r = await fetch('/api/geoportal', {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({action:'municipality_lookup', params:{name: lat+','+lon}})
-    });
-    // Try identify canton via Swisstopo
+    // Identify municipality at coordinates via Swisstopo
     const url = `https://api3.geo.admin.ch/rest/services/ech/SearchServer` +
-      `?searchText=${encodeURIComponent(lat+','+lon)}&type=locations&origins=gg25&sr=4326&lang=de&limit=1`;
-    const r2 = await fetch(url);
-    const data = await r2.json();
-    const label = (data.results?.[0]?.attrs?.label||'').replace(/<[^>]*>/g,'');
-    // Extract canton from label like "Romanshorn (TG)"
-    const ktMatch = label.match(/\(([A-Z]{2})\)/);
-    if (ktMatch) {
-      const kt = ktMatch[1];
-      const rf = {TG:1.00,SG:1.05,AI:1.08,AR:1.03}[kt];
-      if (rf) {
-        S.region = kt; S.rf = rf;
-        const badge = document.getElementById('regionBadge');
-        if (badge) badge.textContent = `${kt} · Faktor ×${rf}`;
+      `?searchText=${lat},${lon}&type=locations&origins=gg25&sr=4326&lang=de&limit=3`;
+    const r = await fetch(url);
+    const data = await r.json();
+    // Find result with canton in TG/SG/AI/AR
+    for (const res of (data.results||[])) {
+      const label = (res.attrs?.label||'').replace(/<[^>]*>/g,'');
+      const ktMatch = label.match(/\(([A-Z]{2})\)/);
+      if (ktMatch) {
+        const kt = ktMatch[1];
+        const rf = {TG:1.00,SG:1.05,AI:1.08,AR:1.03}[kt];
+        if (rf !== undefined) {
+          S.region = kt; S.rf = rf;
+          const badge = document.getElementById('regionBadge');
+          if (badge) badge.textContent = `${kt} · Faktor ×${rf}`;
+          return;
+        }
       }
     }
   } catch(e) { /* silent */ }
