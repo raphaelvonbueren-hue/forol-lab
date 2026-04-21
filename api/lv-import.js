@@ -43,9 +43,13 @@ Wichtige Regeln:
 Antworte NUR mit einem JSON-Array. Kein Text davor oder danach.
 Beispiel: [{"pos":"211","bkp":"2","name":"Aushub allgemein","unit":"m³","price":45.50,"description":"maschineller Aushub Klasse 3-4"}]`;
 
+      const apiKey = req.headers['x-anthropic-key'] || process.env.ANTHROPIC_API_KEY || '';
       const apiResponse = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(apiKey ? { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' } : {})
+        },
         body: JSON.stringify({
           model: 'claude-sonnet-4-20250514',
           max_tokens: 4000,

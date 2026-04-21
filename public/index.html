@@ -765,6 +765,23 @@ button{font-family:'Inter',sans-serif;padding:0.65rem 1.25rem;border:none;border
         <div class="card-title">📄 Leistungsverzeichnisse importieren (PDF)
           <span class="badge badge-green">KI-Extraktion</span>
         </div>
+        <!-- API Key Setup -->
+        <div id="lvApiKeySetup">
+          <div id="lvApiKeyForm" style="background:#fff3e0;border:1px solid #ffcc80;border-radius:8px;padding:0.85rem 1rem;margin-bottom:1rem;font-size:0.85rem">
+            <div style="font-weight:600;color:#e65100;margin-bottom:0.4rem">🔑 Anthropic API Key erforderlich</div>
+            <div style="color:#bf360c;margin-bottom:0.5rem;font-size:0.8rem">
+              Für PDF-Import wird ein API Key benötigt.
+              <a href="https://console.anthropic.com/settings/keys" target="_blank" style="color:#1565c0">Key erstellen →</a>
+            </div>
+            <div style="display:flex;gap:0.5rem;align-items:center">
+              <input id="apiKeyInput" type="password" placeholder="sk-ant-..." 
+                style="flex:1;padding:0.5rem;font-size:0.83rem;border:1px solid #ffcc80;border-radius:6px"
+                onkeydown="if(event.key==='Enter')saveApiKey()">
+              <button type="button" class="btn-red" onclick="saveApiKey()" 
+                style="min-height:36px;padding:0 0.9rem;font-size:0.83rem">Speichern</button>
+            </div>
+          </div>
+        </div>
         <div style="background:#f0f4ff;border:1px solid #c7d7ff;border-radius:8px;padding:0.9rem;margin-bottom:1rem;font-size:0.85rem;color:#1a237e">
           Lade ein oder mehrere LV-PDFs hoch. Claude liest die Einheitspreise automatisch aus.<br>
           <strong>Gleiche Positionen werden nicht überschrieben</strong> — die Preise akkumulieren sich für einen echten Marktwert-Mittelwert.
@@ -4150,6 +4167,38 @@ function removeLVFile(idx) {
   renderLVQueue();
 }
 
+// ─── API KEY MANAGEMENT ───────────────────────────────────────────────────
+function saveApiKey() {
+  const key = document.getElementById('apiKeyInput')?.value?.trim();
+  if (!key || !key.startsWith('sk-')) {
+    alert('Bitte einen gültigen API Key eingeben (beginnt mit sk-ant- oder sk-)');
+    return;
+  }
+  localStorage.setItem('forol_api_key', key);
+  updateApiKeyUI();
+  document.getElementById('apiKeyInput').value = '';
+}
+
+function updateApiKeyUI() {
+  const key = localStorage.getItem('forol_api_key');
+  const form = document.getElementById('lvApiKeyForm');
+  if (!form) return;
+  if (key) {
+    form.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center">
+      <span style="color:#2e7d32;font-size:0.83rem">✅ API Key gesetzt (sk-...${key.slice(-4)})</span>
+      <button type="button" class="btn-white" onclick="clearApiKey()"
+        style="font-size:0.78rem;padding:0.25rem 0.6rem;color:var(--red)">Entfernen</button>
+    </div>`;
+    form.style.background = '#e8f5e9';
+    form.style.borderColor = '#a5d6a7';
+  }
+}
+
+function clearApiKey() {
+  localStorage.removeItem('forol_api_key');
+  location.reload();
+}
+
 async function runLVImport() {
   if (_lvFiles.length === 0) return;
   const btn = document.getElementById('btnLVImport');
@@ -4192,60 +4241,30 @@ Beispiel: [{"pos":"211","bkp":"2","name":"Aushub Kl.3","unit":"m³","price":48.5
         reader.readAsDataURL(file);
       });
 
-      // Direkt gegen Anthropic API (läuft in claude.ai Kontext ohne Key)
-      const r = await fetch('https://api.anthropic.com/v1/messages', {
+      const apiKey = localStorage.getItem('forol_api_key') || '';
+      if (!apiKey) throw new Error('Kein API Key gesetzt. Bitte Key eintragen.');
+
+      // Via /api/lv-import (Server-Endpoint, sendet Key als Header)
+      const r = await fetch('/api/lv-import', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-anthropic-key': apiKey
+        },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 4000,
-          system: systemPrompt,
-          messages: [{
-            role: 'user',
-            content: [
-              {
-                type: 'document',
-                source: { type: 'base64', media_type: 'application/pdf', data: base64 }
-              },
-              {
-                type: 'text',
-                text: 'Extrahiere alle Einheitspreise aus diesem Leistungsverzeichnis als JSON-Array.'
-              }
-            ]
-          }]
+          files: [{ name: file.name, base64, mediaType: 'application/pdf' }]
         })
       });
 
-      if (!r.ok) {
-        const err = await r.json().catch(() => ({}));
-        throw new Error('API ' + r.status + ': ' + (err.error?.message || r.statusText));
-      }
+      if (!r.ok) throw new Error('Server ' + r.status);
+      const apiResp = await r.json();
+      const fileResult = apiResp.results?.[0];
+      if (fileResult?.error) throw new Error(fileResult.error);
 
-      const data = await r.json();
-      const rawText = data.content?.[0]?.text || '';
+      const items = fileResult.items || [];
+      const rawText = null; // not used in this path
 
-      // Parse JSON
-      let items = [];
-      try {
-        const cleaned = rawText.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
-        items = JSON.parse(cleaned);
-        if (!Array.isArray(items)) items = [];
-      } catch(e) {
-        const match = rawText.match(/\[[\s\S]*\]/);
-        if (match) { try { items = JSON.parse(match[0]); } catch(e2) { items = []; } }
-      }
-
-      // Bereinigung
-      items = items.filter(item => item.price > 0 && item.name && item.unit)
-        .map(item => ({
-          pos: String(item.pos || '').trim(),
-          bkp: item.bkp ? String(item.bkp).trim() : null,
-          name: String(item.name || '').substring(0, 80).trim(),
-          unit: String(item.unit || '').trim(),
-          price: parseFloat(String(item.price).replace(/['\s]/g, '')) || 0,
-          description: item.description ? String(item.description).substring(0, 150).trim() : '',
-          source: file.name
-        })).filter(item => item.price > 0);
+      // Items kommen bereits bereinigt vom Server
 
       const { added, updated } = addPricesToDB(items, file.name);
       totalAdded += added;
@@ -4751,8 +4770,8 @@ window.addEventListener('DOMContentLoaded',()=>{
   renderBuildingTabs();
   renderDevOverview();
   updateProjectCount();
-  // Init: Mittelwerte aus DB in CUSTOM_PRICES laden
   try { syncCustomPricesFromDB(loadPriceDB()); } catch(e) {}
+  try { updateApiKeyUI(); } catch(e) {}
 });
 
 function updateProjectCount() {
