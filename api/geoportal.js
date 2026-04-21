@@ -62,206 +62,126 @@ export default async function handler(req, res) {
         const { municipality, parcelNumber, canton } = params;
         const attempts = [];
 
-        // ── SCHRITT 0: BFS-Nr + Koordinaten der Gemeinde (dynamisch, nicht gecached) ──
-        // Suche über gg25 (politische Gemeinden) — das liefert garantiert korrekte BFS
+        // ══════════════════════════════════════════════════════════════════
+        // SCHRITT 0: Gemeinde → BFS + Koordinaten via gg25
+        // Dynamisch, robust, disambiguiert Gossau SG vs Gossau ZH etc.
+        // ══════════════════════════════════════════════════════════════════
         let bfsNr = null, munLat = null, munLon = null, munName = municipality;
         try {
+          const munQuery = canton ? `${municipality} ${canton}` : municipality;
           const munUrl = `https://api3.geo.admin.ch/rest/services/ech/SearchServer`
-            + `?searchText=${encodeURIComponent(municipality)}`
-            + `&type=locations&origins=gg25&sr=4326&lang=de&limit=10`;
-          const munR = await fetch(munUrl, { headers: { 'User-Agent': AGENT } });
+            + `?searchText=${encodeURIComponent(munQuery)}`
+            + `&type=locations&origins=gg25&sr=4326&lang=de&limit=15`;
+          const munR = await fetch(munUrl, { headers: { 'User-Agent': AGENT }, signal: AbortSignal.timeout(6000) });
           if (munR.ok) {
             const munData = await munR.json();
-            // Finde besten Match für gewünschten Kanton
             const candidates = munData.results || [];
+
+            // 1. Strikter Match: Name + Kanton im Label
             let hit = candidates.find(x => {
               const label = (x.attrs?.label || '').replace(/<[^>]*>/g, '');
-              if (!canton) return true;
-              return label.includes('(' + canton + ')');
+              const nameOnly = label.split('(')[0].trim().toLowerCase();
+              const labelHasCanton = canton ? label.includes('(' + canton + ')') : true;
+              return nameOnly === municipality.toLowerCase() && labelHasCanton;
             });
-            // Strikter Match: Gemeindename muss passen
+            // 2. Lockerer: Name beginnt mit gesuchter Gemeinde + Kanton passt
             if (!hit) {
               hit = candidates.find(x => {
-                const name = (x.attrs?.label || '').replace(/<[^>]*>/g, '').split('(')[0].trim();
-                return name.toLowerCase() === municipality.toLowerCase();
+                const label = (x.attrs?.label || '').replace(/<[^>]*>/g, '');
+                const nameOnly = label.split('(')[0].trim().toLowerCase();
+                const labelHasCanton = canton ? label.includes('(' + canton + ')') : true;
+                return nameOnly.startsWith(municipality.toLowerCase()) && labelHasCanton;
               });
             }
+            // 3. Notfall: nur Kantons-Match
+            if (!hit && canton) {
+              hit = candidates.find(x => (x.attrs?.label || '').includes('(' + canton + ')'));
+            }
             hit = hit || candidates[0];
+
             if (hit?.attrs) {
-              bfsNr  = hit.attrs.num || null;
+              bfsNr  = hit.attrs.num || hit.attrs.featureId || null;
               munLat = hit.attrs.lat;
               munLon = hit.attrs.lon;
               munName = (hit.attrs.label || munName).replace(/<[^>]*>/g, '').replace(/\([A-Z]{2}\)/, '').trim();
             }
           }
-          attempts.push({ step: '0_bfs', bfsNr, munName, munLat, munLon });
-        } catch(e) { attempts.push({ step: '0_bfs', error: e.message }); }
+          attempts.push({ step: '0_gemeinde_lookup', bfsNr, munName, munLat, munLon, ok: !!bfsNr });
+        } catch(e) { attempts.push({ step: '0_gemeinde_lookup', error: e.message }); }
 
-        // ── STRATEGIE 1: Swisstopo identify-by-coordinate ────────────────────
-        // PRIMÄRE STRATEGIE: Sobald Gemeinde-Zentrum bekannt → identify um diese Koordinate.
-        // Dieser Endpoint liefert ECHTES Parzellen-Polygon + alle Attribute (nummer, nbident, egrid, area).
-        // Im Gegensatz zu /find funktioniert das zuverlässig für alle Kantone.
-        //
-        // Problem: identify nur bei Koordinate — aber wir haben bloss die Gemeinde-Mitte.
-        // Lösung: Bbox um Gemeinde abtasten, alle Parzellen in Bbox holen → clientside
-        // auf parcelNumber filtern. Kann viele Features zurückgeben, daher hoher limit.
-        //
-        // Alternative: map/identify mit grösserer tolerance + imageDisplay ist kein Massen-
-        // endpoint — besser WMS GetFeatureInfo oder direkt OGC API.
-        // Wir nutzen hier OGC API bbox als "identify für ein Gebiet".
-
-        // Erst WMS GetFeatureInfo auf Gemeinde-Zentrum (liefert Parzelle falls Mitte drauf)
-        if (munLat && munLon) {
-          try {
-            const wmsUrl = `https://wms.geo.admin.ch/?`
-              + `SERVICE=WMS&VERSION=1.3.0&REQUEST=GetFeatureInfo`
-              + `&LAYERS=ch.kantone.cadastralwebmap-farbe&QUERY_LAYERS=ch.kantone.cadastralwebmap-farbe`
-              + `&CRS=EPSG:4326&BBOX=${munLat-0.01},${munLon-0.01},${munLat+0.01},${munLon+0.01}`
-              + `&WIDTH=101&HEIGHT=101&I=50&J=50`
-              + `&INFO_FORMAT=application/json`;
-            const r = await fetch(wmsUrl, { headers: { 'User-Agent': AGENT }, signal: AbortSignal.timeout(6000) });
-            if (r.ok) {
-              const data = await r.json();
-              attempts.push({ strat: 1, type: 'wms_getfeatureinfo', features: (data.features || []).length });
-            }
-          } catch(e) { attempts.push({ strat: 1, error: e.message }); }
+        if (!bfsNr || !munLat || !munLon) {
+          return res.status(200).json({
+            found: false,
+            reason: `Gemeinde "${municipality}" (${canton || 'kein Kanton'}) konnte nicht aufgelöst werden`,
+            attempts
+          });
         }
 
-        // ── STRATEGIE 2: Swisstopo SearchServer origins=parcel ────────────────
-        // Mit korrekter BFS aus Schritt 0
-        const queries = [];
-        if (bfsNr) queries.push(`${bfsNr}_${parcelNumber}`);
-        queries.push(`${parcelNumber} ${munName}`);
-        queries.push(`${parcelNumber} ${municipality}`);
-        queries.push(String(parcelNumber));
+        // ══════════════════════════════════════════════════════════════════
+        // STRATEGIE 1: geodienste.ch OGC API — av_0 (harmonisiert alle CH)
+        // PRIMÄRE STRATEGIE: Liefert Polygon-Geometrie direkt. Robust für TG+SG.
+        // Bei fusionierten Gemeinden: clientseitig auf nbident mit BFS filtern.
+        // ══════════════════════════════════════════════════════════════════
+        // Bbox-Grösse anpassen je nach Gemeindegrösse (kleinere Gemeinden → kleineres Bbox)
+        const bboxSizes = [0.015, 0.04, 0.08];  // ~1.5km / 4km / 8km Radius
+        let ogcDone = false;
 
-        for (const q of queries) {
-          try {
-            const url = `https://api3.geo.admin.ch/rest/services/ech/SearchServer`
-              + `?searchText=${encodeURIComponent(q)}`
-              + `&type=locations&origins=parcel&sr=4326&lang=de&limit=20`;
-            const r = await fetch(url, { headers: { 'User-Agent': AGENT }, signal: AbortSignal.timeout(6000) });
-            if (!r.ok) { attempts.push({ strat: 2, q, status: r.status }); continue; }
-            const data = await r.json();
-            const results = data.results || [];
-            attempts.push({ strat: 2, q, count: results.length });
-            if (!results.length) continue;
-
-            const hits = results.filter(h => {
-              const a = h.attrs || {};
-              const label = (a.label || '').replace(/<[^>]*>/g, '');
-              const featureId = String(a.featureId || a.detail || '');
-              if (canton) {
-                const ktMatch = label.match(/\(([A-Z]{2})\)/);
-                if (ktMatch && ktMatch[1] !== canton) return false;
-              }
-              if (bfsNr) {
-                const fidMatch = featureId.match(/^(\d+)[_\/](.+)$/);
-                if (fidMatch && +fidMatch[1] !== +bfsNr) return false;
-              }
-              const fidParts = featureId.split(/[_\/]/);
-              const fidNum = fidParts[fidParts.length - 1];
-              const labelNum = (label.match(/^([\d\w]+)/) || [])[1] || '';
-              return String(parcelNumber) === fidNum
-                  || String(parcelNumber) === labelNum
-                  || label.includes(` ${parcelNumber} `)
-                  || label.startsWith(`${parcelNumber} `);
-            });
-
-            if (hits.length > 0) {
-              const a = hits[0].attrs;
-              const label = (a.label || '').replace(/<[^>]*>/g, '');
-              const featureId = String(a.featureId || a.detail || '');
-              const fidMatch = featureId.match(/^(\d+)[_\/](.+)$/);
-              const ktMatch = label.match(/\(([A-Z]{2})\)/);
-              // Hole Geometrie via OGC API mit den Koordinaten aus SearchServer
-              let geom = null, areaVal = 0;
-              try {
-                const geoR = await fetch(
-                  `https://geodienste.ch/db/av_0/deu/ogcapi/collections/liegenschaft/items?`
-                  + `f=json&bbox=${a.lon-0.001},${a.lat-0.001},${a.lon+0.001},${a.lat+0.001}&limit=5`,
-                  { headers: { 'User-Agent': AGENT }, signal: AbortSignal.timeout(5000) }
-                );
-                if (geoR.ok) {
-                  const geoData = await geoR.json();
-                  const feat = (geoData.features || []).find(f => {
-                    const p = f.properties || {};
-                    return String(p.number || p.nummer || '') === String(parcelNumber);
-                  });
-                  if (feat) {
-                    geom = feat.geometry;
-                    areaVal = Math.round(feat.properties?.area || feat.properties?.flaeche || 0);
-                  }
-                }
-              } catch(e) {}
-
-              return res.status(200).json({
-                found: true,
-                egrid: a.egrid || a.egris_egrid || featureId,
-                number: fidMatch ? fidMatch[2] : parcelNumber,
-                bfsNr: fidMatch ? +fidMatch[1] : bfsNr,
-                area: areaVal || Math.round(a.area || 0),
-                municipality: munName,
-                canton: (ktMatch && ktMatch[1]) || canton,
-                lat: a.lat, lon: a.lon,
-                geometry: geom,
-                source: 'Swisstopo SearchServer origins=parcel',
-                query: q,
-                label,
-                attempts
-              });
-            }
-          } catch(e) { attempts.push({ strat: 2, q, error: e.message }); }
-        }
-
-        // ── STRATEGIE 3: geodienste.ch OGC API (av_0 statt av_tg) ─────────────
-        // Der harmonisierte Datensatz av_0 enthält ALLE Kantone inkl. TG.
-        // Bei Bbox-Abfrage sehen wir ALLE Parzellen der Gemeinde, clientseitig filtern.
-        if (munLat && munLon) {
-          const ogcBases = [
+        for (const d of bboxSizes) {
+          if (ogcDone) break;
+          for (const ogcBase of [
             'https://geodienste.ch/db/av_0/deu/ogcapi',
             'https://geodienste.ch/db/av_situationsplan_0/deu/ogcapi',
-          ];
-          for (const ogcBase of ogcBases) {
+          ]) {
             try {
+              // Auto-detect: welche Collection hat Parzellen
               const colR = await fetch(`${ogcBase}/collections?f=json`, {
                 headers: { 'User-Agent': AGENT }, signal: AbortSignal.timeout(5000)
               });
-              if (!colR.ok) { attempts.push({ strat: 3, ogcBase, colStatus: colR.status }); continue; }
+              if (!colR.ok) { attempts.push({ strat: 1, ogcBase, colStatus: colR.status }); continue; }
               const colData = await colR.json();
               const parcelCol = (colData.collections || []).find(c => {
                 const id = (c.id || '').toLowerCase();
-                const title = (c.title || '').toLowerCase();
-                return id === 'liegenschaft' || id.includes('liegenschaft')
-                    || id.includes('grundstueck') || id.includes('parcel')
-                    || title.includes('liegenschaft') || title.includes('grundstück');
+                return id === 'liegenschaft' || id === 'grundstueck' || id === 'parcel'
+                    || id.includes('liegenschaft');
               });
-              if (!parcelCol) { attempts.push({ strat: 3, ogcBase, noCol: true }); continue; }
+              if (!parcelCol) { attempts.push({ strat: 1, ogcBase, noCol: true }); continue; }
 
-              const d = 0.03;
-              const url = `${ogcBase}/collections/${parcelCol.id}/items?f=json&limit=200`
+              // Bbox-Query um Gemeindezentrum — limit hoch damit grosse Gemeinden abgedeckt
+              const url = `${ogcBase}/collections/${parcelCol.id}/items?f=json&limit=500`
                 + `&bbox=${munLon-d},${munLat-d},${munLon+d},${munLat+d}`;
               const featR = await fetch(url, {
-                headers: { 'User-Agent': AGENT }, signal: AbortSignal.timeout(10000)
+                headers: { 'User-Agent': AGENT }, signal: AbortSignal.timeout(12000)
               });
-              if (!featR.ok) { attempts.push({ strat: 3, ogcBase, status: featR.status }); continue; }
+              if (!featR.ok) { attempts.push({ strat: 1, ogcBase, d, status: featR.status }); continue; }
               const featData = await featR.json();
               const allFeatures = featData.features || [];
-              attempts.push({ strat: 3, ogcBase, col: parcelCol.id, count: allFeatures.length });
+              attempts.push({ strat: 1, ogcBase, col: parcelCol.id, d, total: allFeatures.length });
 
-              // Clientseitig filtern: nummer muss EXAKT matchen, nbident bevorzugt mit BFS
+              // Filter: Nummer exakt matcht + (falls nbident vorhanden) BFS muss enthalten sein
               const matches = allFeatures.filter(f => {
                 const p = f.properties || {};
-                const nr = String(p.number || p.nummer || '');
+                const nr = String(p.number || p.nummer || p.parcelNumber || '');
                 if (nr !== String(parcelNumber)) return false;
-                // Falls nbident vorhanden: muss BFS enthalten
-                if (bfsNr && p.nbident) {
+                // Disambig für fusionierte Gemeinden:
+                if (p.nbident) {
                   return String(p.nbident).includes(String(bfsNr));
+                }
+                if (p.bfs_nr || p.bfsnr || p.gemeinde_bfs_nr) {
+                  const fnbfs = p.bfs_nr || p.bfsnr || p.gemeinde_bfs_nr;
+                  return +fnbfs === +bfsNr;
                 }
                 return true;
               });
 
+              ogcDone = allFeatures.length > 0;  // Ab hier wissen wir: Bbox hat Daten
+
               if (matches.length) {
+                // Bei mehreren Treffern: nimm das flächenmässig grösste (ignoriert StWE)
+                matches.sort((a, b) => {
+                  const aA = +(a.properties?.area || a.properties?.flaeche || a.properties?.flaechenmass || 0);
+                  const bA = +(b.properties?.area || b.properties?.flaeche || b.properties?.flaechenmass || 0);
+                  return bA - aA;
+                });
                 const f = matches[0];
                 const p = f.properties || {};
                 // Zentrum aus Geometrie
@@ -282,67 +202,113 @@ export default async function handler(req, res) {
                   number: p.number || p.nummer || parcelNumber,
                   nbident: p.nbident || null,
                   bfsNr,
-                  area: Math.round(p.area || p.flaeche || p.areaOfficial || 0),
-                  municipality: p.municipality || p.gemeindename || munName,
-                  canton: p.canton || canton,
+                  area: Math.round(p.area || p.flaeche || p.flaechenmass || 0),
+                  municipality: p.gemeinde || p.gemeinde_name || p.gemeindename || munName,
+                  canton,
                   lat: cLat, lon: cLon,
                   geometry: f.geometry,
-                  source: `geodienste.ch OGC (${parcelCol.id})`,
+                  source: `geodienste.ch OGC av_0 (${parcelCol.id})`,
+                  multipleHits: matches.length > 1 ? matches.length : undefined,
                   attempts
                 });
               }
-            } catch(e) { attempts.push({ strat: 3, ogcBase, error: e.message }); }
+            } catch(e) { attempts.push({ strat: 1, ogcBase, d, error: e.message }); }
           }
         }
 
-        // ── STRATEGIE 4: Fallback — Swisstopo MapServer/find ──────────────────
-        for (const searchField of ['egrid', 'nbident', 'number', 'nummer']) {
+        // ══════════════════════════════════════════════════════════════════
+        // STRATEGIE 2: Swisstopo SearchServer origins=parcel
+        // Fallback: falls OGC-Bbox die Parzelle verfehlt (z.B. weit gestreckte Gemeinde)
+        // ══════════════════════════════════════════════════════════════════
+        const queries = [
+          `${bfsNr}_${parcelNumber}`,
+          `${parcelNumber} ${munName}`,
+          `${parcelNumber} ${municipality}`,
+        ];
+        for (const q of queries) {
           try {
-            const url = `https://api3.geo.admin.ch/rest/services/all/MapServer/find`
-              + `?layer=ch.kantone.cadastralwebmap-farbe`
-              + `&searchText=${encodeURIComponent(parcelNumber)}`
-              + `&searchField=${searchField}&returnGeometry=true&sr=4326&lang=de&contains=false`;
+            const url = `https://api3.geo.admin.ch/rest/services/ech/SearchServer`
+              + `?searchText=${encodeURIComponent(q)}`
+              + `&type=locations&origins=parcel&sr=4326&lang=de&limit=20`;
             const r = await fetch(url, { headers: { 'User-Agent': AGENT }, signal: AbortSignal.timeout(6000) });
-            if (!r.ok) { attempts.push({ strat: 4, searchField, status: r.status }); continue; }
+            if (!r.ok) { attempts.push({ strat: 2, q, status: r.status }); continue; }
             const data = await r.json();
             const results = data.results || [];
-            attempts.push({ strat: 4, searchField, count: results.length });
+            attempts.push({ strat: 2, q, count: results.length });
             if (!results.length) continue;
 
             const hits = results.filter(h => {
-              const props = h.attributes || h.properties || {};
-              const hitBfs = props.bfs_nr || props.bfsnr || props.gem_bfs || null;
-              const hitNr = String(props.nummer || props.number || '');
-              if (bfsNr && hitBfs && +hitBfs !== +bfsNr) return false;
-              return hitNr === String(parcelNumber);
+              const a = h.attrs || {};
+              const label = (a.label || '').replace(/<[^>]*>/g, '');
+              const fid = String(a.featureId || a.detail || '');
+              // Kanton muss passen
+              if (canton) {
+                const ktMatch = label.match(/\(([A-Z]{2})\)/);
+                if (ktMatch && ktMatch[1] !== canton) return false;
+              }
+              // BFS muss passen
+              const fidMatch = fid.match(/^(\d+)[_\/](.+)$/);
+              if (fidMatch && +fidMatch[1] !== +bfsNr) return false;
+              // Nummer muss passen
+              if (fidMatch) return fidMatch[2] === String(parcelNumber);
+              return label.includes(String(parcelNumber));
             });
+
             if (hits.length > 0) {
-              const h = hits[0];
-              const p = h.attributes || h.properties || {};
+              const a = hits[0].attrs;
+              const fid = String(a.featureId || a.detail || '');
+              const fidMatch = fid.match(/^(\d+)[_\/](.+)$/);
+
+              // Versuche Geometrie nachzuladen via OGC bbox an Punkt-Koordinaten
+              let geom = null, areaVal = 0;
+              try {
+                const geoR = await fetch(
+                  `https://geodienste.ch/db/av_0/deu/ogcapi/collections/liegenschaft/items?`
+                  + `f=json&bbox=${a.lon-0.002},${a.lat-0.002},${a.lon+0.002},${a.lat+0.002}&limit=30`,
+                  { headers: { 'User-Agent': AGENT }, signal: AbortSignal.timeout(5000) }
+                );
+                if (geoR.ok) {
+                  const gd = await geoR.json();
+                  const feat = (gd.features || []).find(f => {
+                    const p = f.properties || {};
+                    const nr = String(p.number || p.nummer || '');
+                    if (nr !== String(parcelNumber)) return false;
+                    if (p.nbident) return String(p.nbident).includes(String(bfsNr));
+                    return true;
+                  });
+                  if (feat) {
+                    geom = feat.geometry;
+                    areaVal = Math.round(feat.properties?.area || feat.properties?.flaeche || 0);
+                  }
+                }
+              } catch(e) {}
+
               return res.status(200).json({
                 found: true,
-                egrid: p.egrid || p.egris_egrid || null,
-                number: p.nummer || p.number || parcelNumber,
-                nbident: p.nbident || null,
-                bfsNr: p.bfs_nr || p.bfsnr || bfsNr,
-                area: Math.round(p.area || p.flaeche || 0),
-                municipality: p.gemeinde || p.gemname || munName,
-                canton: p.canton || canton,
-                lat: h.geometry?.y, lon: h.geometry?.x,
-                geometry: h.geometry,
-                source: `Swisstopo find (${searchField})`,
+                egrid: a.egrid || a.egris_egrid || fid,
+                number: fidMatch ? fidMatch[2] : parcelNumber,
+                bfsNr,
+                area: areaVal,
+                municipality: munName,
+                canton,
+                lat: a.lat, lon: a.lon,
+                geometry: geom,
+                source: 'Swisstopo SearchServer origins=parcel',
+                query: q,
                 attempts
               });
             }
-          } catch(e) { attempts.push({ strat: 4, searchField, error: e.message }); }
+          } catch(e) { attempts.push({ strat: 2, q, error: e.message }); }
         }
 
-        // ── Nicht gefunden ─────────────────────────────────────────────────────
+        // ══════════════════════════════════════════════════════════════════
+        // Nicht gefunden
+        // ══════════════════════════════════════════════════════════════════
         return res.status(200).json({
           found: false,
-          reason: 'Parzelle konnte mit allen Strategien nicht gefunden werden',
+          reason: `Parzelle ${parcelNumber} in ${munName} (BFS ${bfsNr}) nicht gefunden`,
           bfsNr, munName, parcelNumber, canton,
-          hint: `Geprüfte Strategien: WMS GetFeatureInfo, SearchServer origins=parcel (${queries.length} Varianten), geodienste.ch OGC av_0 + av_situationsplan_0, Swisstopo find. Falls die Parzelle in einer historischen Gemeinde liegt (z.B. Teilregister nach Fusion), bitte Adresssuche nutzen oder manuell eingeben.`,
+          hint: `Mögliche Ursachen: (1) Nummer falsch, (2) Parzelle im historischen Teilregister (fusionierte Gemeinde), (3) Stockwerkeigentum/Baurecht hat keine eigene Geometrie. Bitte Adresssuche oder Klick auf Karte nutzen.`,
           attempts
         });
       }
