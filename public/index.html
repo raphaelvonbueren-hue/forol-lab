@@ -1254,11 +1254,9 @@ function selectAddressSuggestion(lat, lon, label) {
   setTimeout(() => identifyParcelAtClick(lat, lon), 600);
   // Auto-set region factor from coords
   autoSetRegionFromCoords(lat, lon);
-  // KBS check
+  // Clear env warnings — identifyParcelAtClick will add parcel-specific ones
   const envDiv = document.getElementById('mapEnvWarnings');
   if (envDiv) envDiv.innerHTML = '';
-  checkKBS(lat, lon, document.getElementById('mapEnvWarnings') || document.body);
-  checkProtectedTrees(lat, lon, document.getElementById('mapEnvWarnings') || document.body);
 }
 
 async function searchAddress() {
@@ -1268,14 +1266,29 @@ async function searchAddress() {
   document.getElementById('addrResult').innerHTML =
     `<div style="color:var(--gt);font-size:0.85rem;padding:0.5rem 0">⏳ Suche läuft…</div>`;
   try {
+    // Use same origins + larger limit as autocomplete; take first result with lat/lon
     const url = `https://api3.geo.admin.ch/rest/services/ech/SearchServer` +
-      `?searchText=${encodeURIComponent(val)}&type=locations&origins=address,street,zipcode&sr=4326&lang=de&limit=1`;
+      `?searchText=${encodeURIComponent(val)}&type=locations&origins=address,street&sr=4326&lang=de&limit=6`;
     const r = await fetch(url);
     const data = await r.json();
-    const hit = data.results?.[0]?.attrs;
+    const results = data.results || [];
+    // Take first result with valid coordinates
+    const hit = results.find(x => x.attrs?.lat && x.attrs?.lon)?.attrs;
     if (!hit) {
-      document.getElementById('addrResult').innerHTML =
-        `<div class="alert alert-info" style="margin-top:0.5rem">Adresse nicht gefunden. Bitte genauer eingeben.</div>`;
+      // Fallback: try with zipcode origin
+      const url2 = `https://api3.geo.admin.ch/rest/services/ech/SearchServer` +
+        `?searchText=${encodeURIComponent(val)}&type=locations&origins=address,street,zipcode,gg25&sr=4326&lang=de&limit=10`;
+      const r2 = await fetch(url2);
+      const d2 = await r2.json();
+      const hit2 = (d2.results || []).find(x => x.attrs?.lat && x.attrs?.lon)?.attrs;
+      if (!hit2) {
+        document.getElementById('addrResult').innerHTML =
+          `<div class="alert alert-info" style="margin-top:0.5rem">Adresse nicht gefunden. Versuchen Sie: Strasse + Ort, PLZ + Ort, oder nur den Ortsnamen.</div>`;
+        return;
+      }
+      const label2 = (hit2.label || '').replace(/<[^>]*>/g, '');
+      document.getElementById('addrResult').innerHTML = '';
+      selectAddressSuggestion(hit2.lat, hit2.lon, label2);
       return;
     }
     const label = (hit.label || '').replace(/<[^>]*>/g, '');
@@ -1974,13 +1987,10 @@ async function lookupParcel() {
         </button>
       </div>
     </div>`;
+    // Bei Not-Found nur Karte zentrieren, keine KBS-Umkreis-Suche
     getMunicipalityCoords(selectedPLZ[1], selectedPLZ[2]).then(coords => {
-    if (coords) {
-      showParcelMap(coords.lat, coords.lon, 'Parzelle ' + num + ' · ' + selectedPLZ[1]);
-      checkKBS(coords.lat, coords.lon, out);
-      checkProtectedTrees(coords.lat, coords.lon, out);
-    }
-  });
+      if (coords) showParcelMap(coords.lat, coords.lon, null, 14);
+    });
 }
 
 function applyParcel(p, floors, dim) {
