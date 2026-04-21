@@ -1855,7 +1855,7 @@ async function lookupParcel() {
 
   loading(`Parzelle ${num} in ${selectedPLZ[1]} (${selectedPLZ[2]}) wird gesucht…`);
 
-  // Try real geoportal API first
+  // Versuche echte Swisstopo parcel_search API
   try {
     const r = await fetch('/api/geoportal', {
       method: 'POST',
@@ -1867,46 +1867,90 @@ async function lookupParcel() {
     });
     if (r.ok) {
       const data = await r.json();
-      if (data.found && data.area) {
+      if (data.found) {
+        // Wenn wir lat/lon haben, hole Fläche + Geometrie via identify
+        let area = data.area || 0;
+        let geometry = null;
+        let slopeInfo = null;
+        let kbsInfo = null;
+
+        if (data.lat && data.lon) {
+          try {
+            const identUrl = `https://api3.geo.admin.ch/rest/services/ech/MapServer/identify`
+              + `?geometry=${data.lon},${data.lat}&geometryType=esriGeometryPoint&imageDisplay=500,500,96`
+              + `&mapExtent=${data.lon-0.005},${data.lat-0.005},${data.lon+0.005},${data.lat+0.005}`
+              + `&tolerance=5&layers=all:ch.swisstopo-vd.amtliche-vermessung&sr=4326&lang=de&returnGeometry=true`;
+            const identR = await fetch(identUrl);
+            const identData = await identR.json();
+            const hit = identData.results?.[0];
+            if (hit) {
+              const props = hit.properties || hit.attributes || {};
+              area = area || props.area || props.flaeche || props.flaecheninhalt || 0;
+              geometry = hit.geometry || null;
+              if (geometry && geometry.rings) {
+                slopeInfo = await calcParcelSlope(geometry.rings[0]);
+                kbsInfo = await checkKBSOnParcel(geometry);
+              }
+            }
+          } catch(e) { /* continue without */ }
+        }
+
         unload();
-        // Got real data from geoportal!
-        const area     = Math.round(data.area);
-        const maxFP    = Math.round(area * 0.30);
+        area = Math.round(area);
+        const maxFP = Math.round(area * 0.30);
         const recFloors = 2;
-        const dim      = Math.round(Math.sqrt(maxFP / recFloors));
-        // Koordinaten für Karte — aus Gemeinde-Lookup
-        const munLat = data.lat || null;
-        const munLon = data.lon || null;
+        const dim = area > 0 ? Math.round(Math.sqrt(maxFP / recFloors)) : 0;
+
+        // Zeige Karte auf Parzelle
+        if (data.lat && data.lon) {
+          showParcelMap(data.lat, data.lon, `Parzelle ${data.number||num} · ${selectedPLZ[1]}`, 18);
+          if (geometry?.rings) drawParcelOutline(geometry.rings[0]);
+        }
+
+        // KBS-Warnung nur wenn Treffer
+        const kbsHTML = (kbsInfo?.hit) ? `
+          <div class="kbs-warning" style="margin-top:0.75rem">
+            <div class="kbs-warning-icon">⚠️</div>
+            <div class="kbs-warning-body">
+              <div class="kbs-warning-title">Belastetes Grundstück (KBS)</div>
+              <div class="kbs-warning-detail">${kbsInfo.bezeichnung}<br><em>Abklärung beim Kanton vor Baubeginn.</em></div>
+            </div>
+          </div>` : '';
 
         out.innerHTML = `
           <div class="result-card" style="background:linear-gradient(135deg,#1565c0,#0d47a1)">
-            <strong>✅ Echte Grundbuchdaten — ${selectedPLZ[0]} ${selectedPLZ[1]} (${selectedPLZ[2]})</strong>
-            <div style="font-size:0.78rem;opacity:0.8;margin-top:0.2rem">Quelle: geodienste.ch · EGRID: ${data.egrid||'–'}</div>
+            <strong>✅ Parzelle ${data.number||num} — ${data.municipality||selectedPLZ[1]} (${data.canton||selectedPLZ[2]})</strong>
+            <div style="font-size:0.78rem;opacity:0.8;margin-top:0.2rem">Quelle: ${data.source||'geodienste.ch'}${data.egrid?' · EGRID: '+data.egrid:''}</div>
             <div class="result-grid" style="margin-top:0.75rem">
-              <div class="result-item"><div class="result-item-label">Parzellenfläche</div><div class="result-item-value">${area} m²</div></div>
-              <div class="result-item"><div class="result-item-label">Grundbuchnr.</div><div class="result-item-value">${data.number||num}</div></div>
+              ${area>0?`<div class="result-item"><div class="result-item-label">Fläche</div><div class="result-item-value">${area.toLocaleString('de-CH')} m²</div></div>`:''}
+              <div class="result-item"><div class="result-item-label">Nummer</div><div class="result-item-value">${data.number||num}</div></div>
+              ${slopeInfo?`<div class="result-item"><div class="result-item-label">Gefälle</div><div class="result-item-value">${slopeInfo.slopePercent.toFixed(1)}%</div></div>`:''}
               <div class="result-item"><div class="result-item-label">Gemeinde</div><div class="result-item-value">${data.municipality||selectedPLZ[1]}</div></div>
               <div class="result-item"><div class="result-item-label">Kanton</div><div class="result-item-value">${data.canton||selectedPLZ[2]}</div></div>
-              <div class="result-item"><div class="result-item-label">EGRID</div><div class="result-item-value" style="font-size:0.85rem">${data.egrid||'–'}</div></div>
-              <div class="result-item"><div class="result-item-label">Koordinaten</div><div class="result-item-value" style="font-size:0.8rem">verfügbar</div></div>
+              ${data.egrid?`<div class="result-item"><div class="result-item-label">EGRID</div><div class="result-item-value" style="font-size:0.8rem">${data.egrid}</div></div>`:''}
             </div>
-            <div style="margin-top:0.75rem;font-size:0.85rem;opacity:0.9">
-              💡 Empfehlung: ${recFloors} Geschosse · ca. ${dim}m × ${dim}m
+            ${kbsHTML}
+            ${area>0?`<div style="margin-top:0.75rem;font-size:0.85rem;opacity:0.9">💡 Empfehlung: ${recFloors} Geschosse · ca. ${dim}m × ${dim}m</div>`:''}
+            <div style="margin-top:0.75rem;display:flex;gap:0.5rem;flex-wrap:wrap">
+              ${area>0?`<button class="btn-green" style="flex:1;min-height:40px"
+                onclick='applyParcel(${JSON.stringify({area,slope:slopeInfo?Math.round(slopeInfo.slopePercent):0,soil:2,cov:0.30,az:0.35,zone:"W2",h:10.5})},${recFloors},${dim})'>
+                ✅ Daten übernehmen
+              </button>`:''}
+              <button class="btn-white" style="flex:1;min-height:40px"
+                onclick='addParcelToSelection(${JSON.stringify({egrid:data.egrid||data.number,area,lat:data.lat,lon:data.lon,addr:(data.municipality||"")+" "+(data.number||num),slope:slopeInfo?slopeInfo.slopePercent:0,municipality:data.municipality,geometry,kbs:!!kbsInfo?.hit})})'>
+                ➕ Zu Kombination
+              </button>
             </div>
-            <button class="btn-green" style="margin-top:1rem;width:100%"
-              onclick='applyParcel(${JSON.stringify({area,slope:0,soil:2,cov:0.30,az:0.35,zone:"W2",h:10.5})},${recFloors},${dim})'>
-              Echte Daten übernehmen →
-            </button>
           </div>`;
+
+        // Auto-set region
+        autoSetRegionFromCoords(data.lat, data.lon);
         return;
       }
     }
-  } catch(e) { /* fall through to mock DB */ }
+  } catch(e) { console.warn('parcel_search error', e); }
 
-  await delay(800);
-  unload();
-
-  await delay(600);
+  await delay(200);
   unload();
 
   out.innerHTML = `
