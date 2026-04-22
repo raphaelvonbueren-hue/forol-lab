@@ -211,6 +211,8 @@ button{font-family:'Inter',sans-serif;padding:0.65rem 1.25rem;border:none;border
 .loading-box{background:white;padding:2rem;border-radius:8px;text-align:center;min-width:280px}
 .spinner{width:36px;height:36px;border:3px solid #f3f3f3;border-top:3px solid var(--red);border-radius:50%;animation:spin 0.9s linear infinite;margin:0 auto 1rem}
 @keyframes spin{to{transform:rotate(360deg)}}
+@keyframes plan-progress{0%{width:0%;margin-left:0}50%{width:60%;margin-left:20%}100%{width:0%;margin-left:100%}}
+.plan-progress-bar{width:40%}
 @keyframes pulse{0%,100%{box-shadow:0 0 0 4px rgba(255,109,0,0.35)}50%{box-shadow:0 0 0 8px rgba(255,109,0,0.15)}}
 @keyframes parcel-dash{to{stroke-dashoffset:-32}}
 .parcel-pulse{animation:parcel-dash 1.5s linear infinite}
@@ -2379,16 +2381,33 @@ function renderFileList() {
   const items = document.getElementById('fileItems');
   if (uploadedFiles.length === 0) { list.style.display = 'none'; return; }
   list.style.display = 'block';
-  items.innerHTML = uploadedFiles.map(f => `
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:0.6rem 0.75rem;background:var(--bg);border-radius:6px;margin-bottom:0.4rem;font-size:0.875rem">
-      <span>
-        ${f.type.includes('pdf') ? '📄' : '🖼️'} <strong>${f.name}</strong>
-        ${f.status==='done' ? '<span class="badge badge-green" style="margin-left:0.5rem">analysiert</span>' :
-          f.status==='error' ? '<span class="badge badge-red" style="margin-left:0.5rem">Fehler</span>' :
-          '<span class="badge" style="margin-left:0.5rem;background:#9e9e9e;color:white">ausstehend</span>'}
-      </span>
-      <button onclick="removeFile('${f.name}')" style="background:none;border:none;color:var(--gt);cursor:pointer;font-size:1.1rem;padding:0">✕</button>
-    </div>`).join('');
+  items.innerHTML = uploadedFiles.map((f, i) => {
+    let badge = '';
+    let progress = '';
+    if (f.status === 'done') {
+      badge = '<span class="badge badge-green" style="margin-left:0.5rem">✅ analysiert</span>';
+    } else if (f.status === 'error') {
+      badge = `<span class="badge" style="margin-left:0.5rem;background:#ffebee;color:var(--red);border:1px solid #ffcdd2">❌ ${f.error||'Fehler'}</span>`;
+    } else if (f.status === 'analyzing') {
+      badge = '<span class="badge" style="margin-left:0.5rem;background:#e3f2fd;color:#1565c0;border:1px solid #90caf9">⏳ wird analysiert…</span>';
+      progress = `<div style="margin-top:0.35rem;height:3px;background:#e3f2fd;border-radius:2px;overflow:hidden">
+        <div class="plan-progress-bar" style="height:100%;background:#1565c0;border-radius:2px;animation:plan-progress 2s ease-in-out infinite"></div>
+      </div>`;
+    } else {
+      badge = '<span class="badge" style="margin-left:0.5rem;background:#f5f5f5;color:#9e9e9e">ausstehend</span>';
+    }
+    const canRemove = f.status !== 'analyzing';
+    return `<div id="filerow_${i}" style="padding:0.6rem 0.75rem;background:${f.status==='analyzing'?'#f0f7ff':f.status==='done'?'#f1f8e9':'var(--bg)'};border-radius:6px;margin-bottom:0.4rem;font-size:0.875rem;transition:background 0.3s">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <span style="min-width:0;overflow:hidden">
+          ${f.type.includes('pdf') ? '📄' : '🖼️'} <strong>${f.name}</strong>
+          ${badge}
+        </span>
+        ${canRemove ? `<button onclick="removeFile('${f.name}')" style="background:none;border:none;color:var(--gt);cursor:pointer;font-size:1.1rem;padding:0;flex-shrink:0;margin-left:0.5rem">✕</button>` : ''}
+      </div>
+      ${progress}
+    </div>`;
+  }).join('');
 }
 
 // Convert file to base64
@@ -2408,10 +2427,22 @@ async function analyzeAllPlans() {
   const out = document.getElementById('aiResult');
   out.innerHTML = '';
 
-  // Process files one by one
+  // Zeige Gesamtfortschritt oben
+  const btn = document.querySelector('[onclick="analyzeAllPlans()"]');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Analyse läuft…'; }
+
+  // Process files one by one — pro Datei Live-Status
   for (let i = 0; i < uploadedFiles.length; i++) {
     const f = uploadedFiles[i];
-    loading(`Plan ${i+1}/${uploadedFiles.length} wird analysiert: ${f.name} …`);
+
+    // Status → analyzing (mit Fortschrittsbalken)
+    f.status = 'analyzing';
+    f.error = null;
+    renderFileList();
+
+    // Scroll to file row so user sees progress
+    const row = document.getElementById('filerow_' + i);
+    if (row) row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
     try {
       f.base64 = await fileToBase64(f.file);
@@ -2420,14 +2451,14 @@ async function analyzeAllPlans() {
       f.result = result;
     } catch (err) {
       f.status = 'error';
-      f.error = err.message;
+      f.error = err.message.substring(0, 60);
       console.error('Analysis error:', err);
     }
 
     renderFileList();
   }
 
-  unload();
+  if (btn) { btn.disabled = false; btn.textContent = '🤖 Pläne analysieren'; }
 
   // Merge all results
   const allResults = uploadedFiles.filter(f => f.result).map(f => f.result);
