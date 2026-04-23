@@ -2916,36 +2916,88 @@ function applyAI(d) {
   storeAIData(d);
   AI.source = uploadedFiles.filter(f=>f.status==='done').map(f=>f.name).join(', ');
 
-  const b = S.buildings[0];
+  // ─── MEHRGEBÄUDE-SUPPORT ───────────────────────────────────────────────
+  const aiGebaeude = Array.isArray(d.gebaeude) ? d.gebaeude : [];
+  const numGeb = aiGebaeude.length || 1;
 
-  // Gebäude aus Array (Neue Schema-Struktur)
-  const g = (d.gebaeude && d.gebaeude[0]) || {};
-  if (g.laenge_m)         b.len    = g.laenge_m;
-  if (g.breite_m)         b.wid    = g.breite_m;
-  if (g.anzahl_geschosse) b.floors = g.anzahl_geschosse;
-  if (g.hoehe_gesamt_m)   b.height = +(g.hoehe_gesamt_m / Math.max(b.floors,1)).toFixed(1);
+  // Aktuelle Gebäude-Anzahl an AI-Ergebnis anpassen
+  while (S.buildings.length < numGeb) {
+    const id = Math.max(...S.buildings.map(b=>b.id), 0) + 1;
+    S.buildings.push(freshBuilding(id));
+  }
+  while (S.buildings.length > numGeb && S.buildings.length > 1) {
+    S.buildings.pop();
+  }
 
-  // Flächen nach Raumtyp
-  const byType = d.flaechenByType || {};
-  const wohn = (byType.wohnen||0) + (byType.schlafen||0);
-  if (wohn > 0)                       b.living  = +wohn.toFixed(1);
-  if (byType.kueche > 0)              b.kitchen = +(byType.kueche).toFixed(1);
-  const badTotal = (byType.bad||0) + (byType.wc||0) + (byType.dusche||0);
-  if (badTotal > 0)                   b.bath    = +badTotal.toFixed(1);
+  // Anzahl Wohnungen total (aus allen Gebäuden)
+  const wohnungenTotal = aiGebaeude.reduce((s, g) => s + (g.anzahl_wohnungen || 0), 0);
+  const wohnungenProGeb = Math.floor(wohnungenTotal / Math.max(numGeb, 1)) || 0;
 
-  // Bodenbeläge direkt aus Ausmassen (präziser als Schätzung)
-  const a = d.ausmasse || {};
-  if (a.bodenflaeche_wohnen_m2 > 0) b.parkett = +a.bodenflaeche_wohnen_m2.toFixed(1);
-  if (a.bodenflaeche_nass_m2 > 0)   b.tiles   = +a.bodenflaeche_nass_m2.toFixed(1);
+  // Räume und Flächen pro Gebäude zuordnen (via gebaeude-Feld im Raum)
+  const raeumeProGeb = {};
+  (d.raeume || []).forEach(r => {
+    const gebName = r.gebaeude || (aiGebaeude[0]?.bezeichnung) || 'default';
+    if (!raeumeProGeb[gebName]) raeumeProGeb[gebName] = [];
+    raeumeProGeb[gebName].push(r);
+  });
 
-  S.buildings[0] = b;
+  // Pro Gebäude die Daten aus AI übernehmen
+  aiGebaeude.forEach((g, i) => {
+    if (i >= S.buildings.length) return;
+    const b = S.buildings[i];
+
+    if (g.bezeichnung)        b.label  = g.bezeichnung;
+    if (g.laenge_m)           b.len    = g.laenge_m;
+    if (g.breite_m)           b.wid    = g.breite_m;
+    if (g.anzahl_geschosse)   b.floors = g.anzahl_geschosse;
+    if (g.hoehe_gesamt_m)     b.height = +(g.hoehe_gesamt_m / Math.max(b.floors,1)).toFixed(1);
+    if (g.anzahl_wohnungen)   b.units  = g.anzahl_wohnungen;
+
+    // Räume dieses Gebäudes summieren
+    const gebRaeume = raeumeProGeb[g.bezeichnung] || [];
+    const byType = {};
+    gebRaeume.forEach(r => {
+      const t = r.typ || 'sonstige';
+      byType[t] = (byType[t] || 0) + (r.flaeche_boden_m2 || 0);
+    });
+    const wohn = (byType.wohnen||0) + (byType.schlafen||0) + (byType.essen||0) + (byType.kind||0);
+    if (wohn > 0)                       b.living  = +wohn.toFixed(1);
+    if (byType.kueche > 0)              b.kitchen = +(byType.kueche).toFixed(1);
+    const badTotal = (byType.bad||0) + (byType.wc||0) + (byType.dusche||0);
+    if (badTotal > 0)                   b.bath    = +badTotal.toFixed(1);
+  });
+
+  // Wenn nur ein Gebäude: Fallback auf Aggregat
+  if (numGeb === 1) {
+    const b = S.buildings[0];
+    const byType = d.flaechenByType || {};
+    const wohn = (byType.wohnen||0) + (byType.schlafen||0);
+    if (wohn > 0)                       b.living  = +wohn.toFixed(1);
+    if (byType.kueche > 0)              b.kitchen = +(byType.kueche).toFixed(1);
+    const badTotal = (byType.bad||0) + (byType.wc||0) + (byType.dusche||0);
+    if (badTotal > 0)                   b.bath    = +badTotal.toFixed(1);
+    const a = d.ausmasse || {};
+    if (a.bodenflaeche_wohnen_m2 > 0) b.parkett = +a.bodenflaeche_wohnen_m2.toFixed(1);
+    if (a.bodenflaeche_nass_m2 > 0)   b.tiles   = +a.bodenflaeche_nass_m2.toFixed(1);
+  } else {
+    // Bei Mehrgebäude: Ausmasse proportional pro Gebäude verteilen
+    const a = d.ausmasse || {};
+    S.buildings.forEach((b, i) => {
+      const fraction = 1 / numGeb;
+      if (a.bodenflaeche_wohnen_m2 > 0) b.parkett = +(a.bodenflaeche_wohnen_m2 * fraction).toFixed(1);
+      if (a.bodenflaeche_nass_m2 > 0)   b.tiles   = +(a.bodenflaeche_nass_m2 * fraction).toFixed(1);
+    });
+  }
+
+  const b0 = S.buildings[0];
 
   // Summary für User
   const lines = [
     `✅ KI-Analyse übernommen (${AI.source})`,
     '',
-    `🏗️ ${d.anzahl_gebaeude || 1} Gebäude · ${b.len}m × ${b.wid}m · ${b.floors} Geschosse`,
-    `🏠 Wohnfläche: ${b.living} m²  ·  Küche: ${b.kitchen} m²  ·  Bad: ${b.bath} m²`,
+    `🏗️ ${numGeb} Gebäude · ${wohnungenTotal || '?'} Wohnungen total`,
+    numGeb > 1 ? `   (${S.buildings.map(b => `${b.label||'Haus'}: ${b.len}×${b.wid}m, ${b.floors} Gesch., ${b.units||'?'} WE`).join('  ·  ')})` : '',
+    `🏠 Wohnfläche: ${b0.living} m²  ·  Küche: ${b0.kitchen} m²  ·  Bad: ${b0.bath} m²`,
     `🪟 ${AI.windowCount || '?'} Fenster · ${AI.windowArea?.toFixed(1) || '?'} m²`,
     `🚪 ${AI.doorTotal || '?'} Türen total`,
     `🍳 ${AI.kitchens || '?'} Küchen  ·  🛁 ${AI.baths || '?'} Bäder  ·  🚽 ${AI.wcs || '?'} WCs`,
@@ -4755,7 +4807,34 @@ function saveProject() {
       bkp1: g1, bkp2: g2, bkp3: g3, bkp4: g4
     },
     aiUsed:   AI.source !== null,
-    aiSource: AI.source
+    aiSource: AI.source,
+    // AI-Analyse komplett mitspeichern, damit Projekt-Wechsel nichts überschreibt
+    aiData: {
+      source:       AI.source,
+      windowArea:   AI.windowArea,
+      windowCount:  AI.windowCount,
+      doorInner:    AI.doorInner,
+      doorOuter:    AI.doorOuter,
+      doorBalcony:  AI.doorBalcony,
+      doorTotal:    AI.doorTotal,
+      rooms:        AI.rooms,
+      windows:      AI.windows,
+      buildings:    AI.buildings,
+      walls:        AI.walls,
+      kitchens:     AI.kitchens,
+      baths:        AI.baths,
+      wcs:          AI.wcs,
+      ausmasse:     AI.ausmasse,
+      tiefgarage:   AI.tiefgarage,
+      umgebung:     AI.umgebung,
+    },
+    uploadedFiles: uploadedFiles.filter(f => f.result).map(f => ({
+      name: f.name,
+      size: f.file?.size,
+      type: f.type,
+      status: f.status,
+      result: f.result,
+    })),
   };
 
   if (existingIdx >= 0) {
@@ -4787,6 +4866,30 @@ function loadProject(id) {
   S.region     = p.region;
   S.rf         = p.rf;
   S.cur        = S.buildings[0]?.id || 1;
+
+  // Restore AI data (so switching projects doesn't overwrite)
+  AI.source = null;
+  AI.windowArea = AI.windowCount = AI.doorInner = AI.doorOuter = AI.doorBalcony = AI.doorTotal = null;
+  AI.rooms = AI.windows = AI.buildings = AI.walls = [];
+  AI.kitchens = AI.baths = AI.wcs = null;
+  AI.ausmasse = AI.tiefgarage = AI.umgebung = {};
+
+  if (p.aiData) {
+    Object.keys(p.aiData).forEach(k => {
+      if (p.aiData[k] != null) AI[k] = p.aiData[k];
+    });
+  }
+
+  // Restore uploaded files list (so user sees which plans were analysed)
+  if (Array.isArray(p.uploadedFiles)) {
+    uploadedFiles = p.uploadedFiles.map(f => ({
+      name: f.name, type: f.type, status: f.status || 'done',
+      result: f.result, base64: null, file: null,
+    }));
+    if (typeof renderFileList === 'function') renderFileList();
+  } else {
+    uploadedFiles = [];
+  }
 
   // Restore form fields
   document.getElementById('projName').value     = p.name     || '';
@@ -4835,7 +4938,18 @@ function newProject() {
   S.cur       = 1;
   S.region    = 'TG';
   S.rf        = 1.00;
-  AI.source   = null;
+
+  // Alle AI-Daten zurücksetzen
+  AI.source = null;
+  AI.windowArea = AI.windowCount = AI.doorInner = AI.doorOuter = AI.doorBalcony = AI.doorTotal = null;
+  AI.rooms = AI.windows = AI.buildings = AI.walls = [];
+  AI.kitchens = AI.baths = AI.wcs = null;
+  AI.ausmasse = AI.tiefgarage = AI.umgebung = {};
+  uploadedFiles = [];
+  if (typeof renderFileList === 'function') renderFileList();
+  const ar = document.getElementById('aiResult');
+  if (ar) ar.innerHTML = '';
+
   ['projName','projNum','projClient','projLocation','parcelArea'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';

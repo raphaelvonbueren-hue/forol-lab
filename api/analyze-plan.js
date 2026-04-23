@@ -375,6 +375,72 @@ export default async function handler(req, res) {
 
 const systemPrompt = `Du bist Schweizer Bauingenieur, Architekt und Ausmass-Spezialist mit Expertise in SIA 416, SIA 451, BKP/eBKP-H und CRB-Normpositionen.
 
+═══════════════════════════════════════════════════════════════════════════════
+KRITISCHE REGELN — IMMER BEACHTEN:
+═══════════════════════════════════════════════════════════════════════════════
+
+REGEL 1: EIN GEBÄUDE IST EIN PHYSISCHES HAUS — NICHT EIN PLAN!
+Ein Bauplan-Dokument enthält typischerweise mehrere Pläne DESSELBEN Gebäudes:
+  • EG-Grundriss + OG-Grundriss + UG-Grundriss = EIN Gebäude (nicht drei)
+  • Fassade Nord + Süd + Ost + West = DASSELBE Gebäude (nicht vier)
+  • Längsschnitt + Querschnitt = DASSELBE Gebäude (nicht zwei)
+  • Situationsplan zeigt alle Gebäude aus der Vogelperspektive
+
+SO IDENTIFIZIERST DU GEBÄUDE KORREKT:
+1. Suche zuerst den SITUATIONSPLAN oder die ÜBERSICHT — dort siehst du die
+   tatsächliche Anzahl Gebäude auf dem Grundstück (z.B. "Haus A", "Haus B").
+2. Zähle Gebäude-Bezeichnungen wie "Haus A/B/C", "Gebäude 1/2/3", "MFH West/Ost".
+3. Gleicher Grundriss, verschiedene Geschosse → EIN Gebäude mit mehreren Geschossen.
+4. Gleiche Fassadenansicht von verschiedenen Himmelsrichtungen → EIN Gebäude.
+5. NIEMALS Pläne als Gebäude zählen. Anzahl Gebäude = Anzahl physische Häuser.
+
+Beispiel: Projekt mit 2 Mehrfamilienhäusern (Haus A + Haus B), jeweils 3 Geschosse,
+mit je EG/OG1/OG2/UG Grundrissen + 4 Fassaden + 2 Schnitten
+= 2 Gebäude (NICHT 2+4×2+8+2 = 12 Gebäude).
+
+Vor der Rückgabe: GEGENPRÜFUNG durchführen — macht die Anzahl Sinn im Kontext?
+Wenn mehrere Grundrisse gleich gross sind und gleiche Raumaufteilung haben,
+gehören sie zum selben Gebäude, nicht zu verschiedenen.
+
+REGEL 2: WANDFLÄCHEN IM RAUM WERDEN SO BERECHNET:
+Pro Wand einer rechteckigen/polygonalen Raumbegrenzung:
+  Wandfläche_einzelWand = Wandlänge × Raumhöhe
+Gesamte Wandfläche im Raum:
+  flaeche_wand_m2 = Σ (alle Wandlängen) × Raumhöhe  =  Raumumfang × Raumhöhe
+Dann Öffnungen abziehen:
+  flaeche_wand_m2 -= Fensterflächen des Raums
+  flaeche_wand_m2 -= Türflächen des Raums (Standard: 0.80 × 2.00 = 1.6 m²)
+
+BEISPIEL Bad 3.0m × 2.4m, Raumhöhe 2.4m, 1 Fenster 0.6×1.0, 1 Tür 0.8×2.0:
+  Umfang = 2 × (3.0 + 2.4) = 10.8 m
+  Wandfläche brutto = 10.8 × 2.4 = 25.92 m²
+  minus Fenster 0.6 = 25.32 m²
+  minus Tür 1.6 = 23.72 m² ← das ist flaeche_wand_m2
+
+REGEL 3: BAD-PLATTENBELAG (plattenbelag_bad_m2):
+Böden werden meistens vollflächig verfliest.
+Wände werden meist bis 2.20 m Höhe verfliest (NICHT bis zur Raumhöhe).
+  boden_belag = flaeche_boden_m2
+  wand_belag  = Raumumfang × 2.20m  minus Tür- und Fensterflächen bis 2.20m
+  plattenbelag_bad_m2 = boden_belag + wand_belag
+
+BEISPIEL Bad 3.0m × 2.4m (7.2 m²), Tür 0.8×2.0, Fenster 0.6×1.0 auf Höhe 1.0-2.0m:
+  Boden-Belag = 7.2 m²
+  Wand-Belag = 10.8 × 2.20 = 23.76 m² minus Tür (1.6) minus Fenster (0.6)
+    = 21.56 m²
+  plattenbelag_bad_m2 = 7.2 + 21.56 = 28.76 m²
+
+REGEL 4: WOHNUNGEN RICHTIG ZUORDNEN:
+Bei einem Mehrfamilienhaus (MFH) mit gleichen Grundrissen auf mehreren Etagen:
+  • EG, OG1, OG2 mit je gleichem Grundriss = mehrere Wohnungen im SELBEN Gebäude
+  • Anzahl Wohnungen pro Gebäude = Anzahl identischer Wohnungs-Einheiten
+  • Beispiel: 2 Gebäude × 5 Wohnungen = 10 Wohnungen total, NICHT 10 Gebäude
+
+Jede Wohnung bekommt einen "wohnung"-Schlüssel (z.B. "Haus A / EG links", "Haus B / OG2"),
+damit Räume eindeutig der Wohnung zugeordnet werden können.
+
+═══════════════════════════════════════════════════════════════════════════════
+
 DEINE KERNKOMPETENZ: Aus einem Vektor-Bauplan präzise Ausmasse herleiten — durch GEOMETRISCHE BERECHNUNG anhand der sichtbaren Referenzmasse, NICHT nur durch direktes Ablesen.
 
 ═══════════════════════════════════════════════════════════════════════════════
@@ -504,17 +570,32 @@ Deine Antwort muss alle Felder des Schemas MAXIMAL befüllt zurückgeben. Leere 
       type: 'text',
       text: `Analysiere diesen Bauplan (${file.name || 'Plan'}) vollständig.
 
-WICHTIG: Du bist Ingenieur — nicht Scanner.
-1. Lies zuerst ALLE sichtbaren Bemassungen und den Massstab ab (Kalibrierung).
-2. Berechne dann aktiv fehlende Masse proportional aus den Referenzmassen.
-3. Nutze bei Bedarf SIA-Standardmasse für typische Elemente (Fenster, Türen, Raumhöhen).
-4. Berechne Fassadenflächen, Aushub, Raumflächen aus der Geometrie.
+KRITISCHE GEGENPRÜFUNG vor der Rückgabe:
 
-Zähle jedes einzelne Fenster im Plan. Jedes Zimmer hat Fenster — finde sie alle.
-Wenn eine Tiefgarage erkennbar ist, berechne Aushub_Humus_m3 und Aushub_Erde_m3.
+1. GEBÄUDE: Ist die Anzahl plausibel?
+   Mehrere Grundrisse desselben Gebäudes (EG/OG/UG) = EIN Gebäude.
+   Mehrere Fassaden-Ansichten (Nord/Süd/Ost/West) = EIN Gebäude.
+   Zähle nur physische Häuser — NICHT Pläne.
+   Situationsplan prüfen: wie viele Häuser stehen dort?
 
-null ist nur erlaubt wenn das Element real nicht im Plan ist — NICHT bei fehlender Bemassung.
-Dokumentiere Annahmen in "bemerkungen".`,
+2. WOHNUNGEN: Sind diese den Gebäuden korrekt zugeordnet?
+   Beispiel: 2 Gebäude × 5 Wohnungen = 10 Wohnungen total.
+   Jede Wohnung hat eindeutige ID mit Gebäude-Zuordnung.
+
+3. RÄUME: Hat jeder Raum eine Wohnung-Zuordnung?
+   Bad/Küche/WC/Zimmer → wohnung-Feld muss gefüllt sein bei MFH.
+
+4. BAD-WANDFLÄCHEN: Berechnet du die 4 Wände?
+   flaeche_wand_m2 = Raumumfang × Raumhöhe - Öffnungen
+   plattenbelag_bad_m2 = Boden + (Umfang × 2.20m - Öffnungen)
+
+5. Du bist Ingenieur — nicht Scanner.
+   Lies ALLE sichtbaren Bemassungen zuerst ab.
+   Berechne fehlende Masse aus Proportionen.
+   Nutze SIA-Standardmasse als Fallback mit Vermerk in "bemerkungen".
+
+null ist nur erlaubt wenn das Element real nicht im Plan ist.
+NIEMALS null bei fehlender expliziter Bemassung wenn proportional berechenbar.`,
     },
   ];
 
@@ -530,10 +611,126 @@ Dokumentiere Annahmen in "bemerkungen".`,
       temperature: 0.3,
     });
 
-    return res.status(200).json({ result: object });
+    // ─── POST-PROCESSING: Fehler-Korrektur ────────────────────────────────
+    const cleaned = postProcess(object);
+    return res.status(200).json({ result: cleaned });
 
   } catch (err) {
     console.error('analyze-plan error:', err);
     return res.status(200).json({ error: err.message || 'Analyse fehlgeschlagen' });
   }
+}
+
+// ─── POST-PROCESSING ──────────────────────────────────────────────────────────
+// Korrigiert systematische Fehler des Modells:
+// 1. Gebäude-Deduplizierung (Modell zählt manchmal Pläne als Gebäude)
+// 2. Wandflächen-Berechnung nachziehen wenn fehlend
+// 3. Plattenbelag-Berechnung für Bäder
+
+function postProcess(data) {
+  if (!data || typeof data !== 'object') return data;
+
+  // ─── 1. GEBÄUDE-DEDUPLIZIERUNG ──────────────────────────────────────────────
+  // Wenn Modell mehr Gebäude zurückgibt als sinnvoll, dedup nach Bezeichnung
+  // UND nach Geometrie (gleiche L×B und Geschossanzahl = wahrscheinlich dasselbe)
+  if (Array.isArray(data.gebaeude) && data.gebaeude.length > 1) {
+    const seen = new Map();
+    const dedupKey = (g) => {
+      const bez = (g.bezeichnung || '').toLowerCase().trim();
+      // Entferne Geschoss/Ansicht-Suffixe die auf Plan-Zählung hindeuten
+      const cleanBez = bez
+        .replace(/\s*[-–]?\s*(eg|og\d*|ug\d*|dg|ag|kg|dach|keller)\s*$/i, '')
+        .replace(/\s*(grundriss|schnitt|fassade|ansicht|situation)\s*$/i, '')
+        .replace(/\s*(nord|sued|süd|ost|west|n|s|o|w)\s*$/i, '')
+        .trim();
+      // Geometrie-Fingerprint
+      const geo = `${g.laenge_m||0}x${g.breite_m||0}x${g.anzahl_geschosse||0}`;
+      return cleanBez + '|' + geo;
+    };
+
+    for (const g of data.gebaeude) {
+      const key = dedupKey(g);
+      if (!seen.has(key)) {
+        seen.set(key, { ...g });
+      } else {
+        // Merge: nimm den vollständigeren Datensatz
+        const existing = seen.get(key);
+        for (const k of Object.keys(g)) {
+          if (existing[k] == null && g[k] != null) existing[k] = g[k];
+          // Maxima für numerische Werte
+          if (typeof g[k] === 'number' && typeof existing[k] === 'number') {
+            existing[k] = Math.max(existing[k], g[k]);
+          }
+        }
+      }
+    }
+    const before = data.gebaeude.length;
+    data.gebaeude = Array.from(seen.values());
+    data.anzahl_gebaeude = data.gebaeude.length;
+
+    if (before !== data.gebaeude.length) {
+      data.bemerkungen = (data.bemerkungen ? data.bemerkungen + ' · ' : '') +
+        `Gebäude dedupliziert: ${before} → ${data.gebaeude.length} (gleiche Geometrie/Bezeichnung zusammengefasst)`;
+    }
+  }
+
+  // ─── 2. WANDFLÄCHEN UND BAD-PLATTENBELAG NACHBERECHNEN ──────────────────────
+  if (Array.isArray(data.raeume)) {
+    data.raeume.forEach(r => {
+      if (!r) return;
+
+      // Wenn keine Wandfläche aber Umfang + Höhe da sind → berechnen
+      const flaeche = r.flaeche_boden_m2;
+      const hoehe   = r.raumhoehe_m || r.lichte_hoehe_m || 2.4;
+      let umfang = r.umfang_m;
+
+      // Umfang aus Fläche schätzen falls fehlend (rechteckig angenommen)
+      if (!umfang && flaeche && flaeche > 0) {
+        // Näherung für rechteckige Räume: 2×(L+B) mit L:B ≈ 1.3:1
+        const w = Math.sqrt(flaeche / 1.3);
+        const l = 1.3 * w;
+        umfang = 2 * (l + w);
+      }
+
+      // Wandfläche berechnen wenn fehlend
+      if ((r.flaeche_wand_m2 == null || r.flaeche_wand_m2 === 0) && umfang && hoehe) {
+        r.flaeche_wand_m2 = +(umfang * hoehe - 1.6).toFixed(2); // minus 1 Standard-Tür
+      }
+
+      // Deckenfläche = Bodenfläche falls nicht gesetzt
+      if ((r.flaeche_decke_m2 == null || r.flaeche_decke_m2 === 0) && flaeche) {
+        r.flaeche_decke_m2 = flaeche;
+      }
+
+      // Bad-Plattenbelag: Boden + (Umfang × 2.20m) - Tür
+      if ((r.typ === 'bad' || r.typ === 'dusche' || r.typ === 'wc') &&
+          (r.plattenbelag_bad_m2 == null || r.plattenbelag_bad_m2 === 0) &&
+          flaeche && umfang) {
+        const wandBelag = Math.max(0, umfang * 2.20 - 1.6); // minus Standard-Tür
+        r.plattenbelag_bad_m2 = +(flaeche + wandBelag).toFixed(2);
+      }
+
+      if (!r.umfang_m && umfang) r.umfang_m = +umfang.toFixed(2);
+    });
+  }
+
+  // ─── 3. BAD-LIST NACHBERECHNEN ──────────────────────────────────────────────
+  if (Array.isArray(data.baeder)) {
+    data.baeder.forEach(b => {
+      if (!b) return;
+      const flaeche = b.flaeche_m2;
+      if (flaeche && (b.plattenbelag_boden_m2 == null || b.plattenbelag_boden_m2 === 0)) {
+        b.plattenbelag_boden_m2 = flaeche;
+      }
+      if (flaeche && (b.plattenbelag_wand_m2 == null || b.plattenbelag_wand_m2 === 0)) {
+        // Umfang aus Bad-Fläche geschätzt (rechteckig)
+        const w = Math.sqrt(flaeche / 1.2);
+        const l = 1.2 * w;
+        const umfang = 2 * (l + w);
+        b.plattenbelag_wand_m2 = +(Math.max(0, umfang * 2.20 - 1.6)).toFixed(2);
+      }
+    });
+  }
+
+  return data;
 }
