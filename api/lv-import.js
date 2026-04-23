@@ -1,8 +1,8 @@
 // POST /api/lv-import
-// Leistungsverzeichnis-Import via Vercel AI SDK + @ai-sdk/anthropic
+// Leistungsverzeichnis-Import via Vercel AI Gateway (keine API Key nötig auf Vercel)
 // Extrahiert Einheitspreise aus PDF-Offerten/LVs, gibt strukturiertes JSON zurück
 
-import { anthropic } from '@ai-sdk/anthropic';
+
 import { generateObject } from 'ai';
 import { z } from 'zod';
 
@@ -44,7 +44,7 @@ export default async function handler(req, res) {
 
     try {
       const { object } = await generateObject({
-        model: anthropic('claude-sonnet-4-5'),
+        model: 'anthropic/claude-sonnet-4-5',
         schema: LVImportSchema,
         schemaName: 'LVImport',
         schemaDescription: 'Einheitspreise aus einem Schweizer Leistungsverzeichnis oder einer Offerte.',

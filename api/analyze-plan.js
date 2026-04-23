@@ -2,7 +2,7 @@
 // Umfassende Bauplan-Analyse via Vercel AI SDK + Claude
 // Extrahiert ALLE relevanten Daten für vollständige BKP-Kalkulation
 
-import { anthropic } from '@ai-sdk/anthropic';
+
 import { generateObject } from 'ai';
 import { z } from 'zod';
 
@@ -494,7 +494,7 @@ Gehe systematisch durch jeden Bereich. Alle nicht sichtbaren/nicht ablesbaren We
 
   try {
     const { object } = await generateObject({
-      model: anthropic('claude-sonnet-4-5'),
+      model: 'anthropic/claude-sonnet-4-5',
       schema: BauplanSchema,
       schemaName: 'BauplanAnalyse',
       schemaDescription: 'Vollständige SIA-konforme Extraktion aller relevanten Daten aus Schweizer Bauplänen',
