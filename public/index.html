@@ -515,6 +515,12 @@ button{font-family:'Inter',sans-serif;padding:0.65rem 1.25rem;border:none;border
           Laden Sie Grundrisse, Schnitte und Fassadenpläne hoch. Claude liest automatisch:
           Raumflächen · Gebäudelängen &amp; -breiten · Geschosshöhen · Raumhöhen · Fensteranzahl &amp; -grössen
         </div>
+        <div id="planContextBanner" style="display:none;margin-bottom:1rem;padding:0.85rem 1rem;background:#fff3e0;border:2px solid #ff9800;border-radius:6px;font-size:0.85rem;color:#e65100">
+          <strong>⚠️ Projektdaten unvollständig</strong><br>
+          <span id="planContextMissing"></span><br>
+          <span style="font-size:0.78rem">Diese Angaben helfen der KI, die Pläne korrekt zu interpretieren — andernfalls zählt die KI oft jeden Plan (EG/OG/Fassade) als separates Gebäude.</span>
+          <button onclick="goTo('project')" style="margin-top:0.5rem;background:#ff9800;color:white;border:none;padding:0.4rem 0.9rem;border-radius:4px;font-size:0.82rem;cursor:pointer;font-weight:600">→ Projektdaten ergänzen</button>
+        </div>
         <div id="uploadZoneMain" class="upload-zone"
              ondragover="event.preventDefault();this.style.borderColor='var(--red)'"
              ondragleave="this.style.borderColor='var(--br)'"
@@ -542,9 +548,48 @@ button{font-family:'Inter',sans-serif;padding:0.65rem 1.25rem;border:none;border
         <div class="card-title">Grunddaten</div>
         <div class="form-grid">
           <div class="fg"><label>Projektname *</label><input id="projName" placeholder="z.B. Wohnüberbauung Birkenweg"></div>
-          <div class="fg"><label>Projektnummer</label><input id="projNum" placeholder="z.B. 2025-001"></div>
+          <div class="fg"><label>Forol-Projektnummer *</label><input id="projNum" placeholder="z.B. F-2026-001"></div>
           <div class="fg"><label>Bauherr *</label><input id="projClient" placeholder="Name des Bauherrn"></div>
           <div class="fg"><label>Standort *</label><input id="projLocation" placeholder="z.B. Frauenfeld TG"></div>
+        </div>
+        <div class="fg" style="margin-top:0.75rem">
+          <label>Projektbeschreibung</label>
+          <textarea id="projDesc" rows="3" placeholder="Kurze Beschreibung des Projekts — Art, Besonderheiten, Zweck…"
+            style="width:100%;padding:0.6rem 0.75rem;border:1px solid var(--br);border-radius:6px;font-family:inherit;font-size:0.875rem;resize:vertical"></textarea>
+        </div>
+      </div>
+
+      <div class="card" style="border:2px solid #1565c0;background:#f0f7ff">
+        <div class="card-title" style="color:#1565c0">🎯 Projekt-Struktur (wichtig für KI-Plan-Analyse!)</div>
+        <div style="font-size:0.82rem;color:var(--gt);margin-bottom:0.75rem">
+          Diese Angaben hilft der KI, die hochgeladenen Pläne korrekt zu interpretieren.
+          Ohne diese Daten zählt die KI oft Pläne als Gebäude (EG/OG/UG-Grundrisse separat).
+        </div>
+        <div class="form-grid">
+          <div class="fg"><label>Anzahl Gebäude *</label>
+            <input type="number" id="projNumBuildings" min="1" max="50" value="1" placeholder="z.B. 2">
+          </div>
+          <div class="fg"><label>Anzahl Wohnungen total *</label>
+            <input type="number" id="projNumUnits" min="0" max="500" value="1" placeholder="z.B. 10">
+          </div>
+          <div class="fg"><label>Gebäudeart</label>
+            <select id="projBuildingKind">
+              <option value="EFH">Einfamilienhaus</option>
+              <option value="ZFH">Zweifamilienhaus</option>
+              <option value="MFH" selected>Mehrfamilienhaus (MFH)</option>
+              <option value="RH">Reiheneinfamilienhäuser</option>
+              <option value="UEB">Überbauung (mehrere Gebäude)</option>
+              <option value="GEW">Gewerbe</option>
+              <option value="MIX">Wohnen + Gewerbe</option>
+            </select>
+          </div>
+          <div class="fg"><label>Tiefgarage vorhanden</label>
+            <select id="projHasTG">
+              <option value="unknown">unbekannt</option>
+              <option value="yes">Ja</option>
+              <option value="no">Nein</option>
+            </select>
+          </div>
         </div>
       </div>
 
@@ -2424,6 +2469,28 @@ function fileToBase64(file) {
 async function analyzeAllPlans() {
   if (uploadedFiles.length === 0) return;
 
+  // Validierung: Projekt-Struktur muss gesetzt sein für gute KI-Ergebnisse
+  const numB = +document.getElementById('projNumBuildings')?.value || 0;
+  const numU = +document.getElementById('projNumUnits')?.value || 0;
+  const pname = document.getElementById('projName')?.value?.trim();
+
+  if (!pname || !numB || !numU) {
+    const missing = [];
+    if (!pname) missing.push('Projektname');
+    if (!numB)  missing.push('Anzahl Gebäude');
+    if (!numU)  missing.push('Anzahl Wohnungen');
+
+    if (!confirm(
+      `⚠️ Fehlende Projekt-Angaben: ${missing.join(', ')}\n\n` +
+      `Die KI-Plan-Analyse liefert ohne diese Angaben oft falsche Gebäudezahlen.\n` +
+      `Jetzt trotzdem analysieren oder erst Projektdaten ergänzen?\n\n` +
+      `OK = Jetzt analysieren  ·  Abbrechen = Projektdaten ergänzen`
+    )) {
+      goTo('project');
+      return;
+    }
+  }
+
   const out = document.getElementById('aiResult');
   out.innerHTML = '';
 
@@ -2546,6 +2613,19 @@ WICHTIG:
     }
   ];
 
+  // Projekt-Context sammeln damit KI die Pläne korrekt interpretiert
+  const projectContext = {
+    name:          document.getElementById('projName')?.value?.trim() || null,
+    number:        document.getElementById('projNum')?.value?.trim() || null,
+    description:   document.getElementById('projDesc')?.value?.trim() || null,
+    numBuildings: +document.getElementById('projNumBuildings')?.value || null,
+    numUnits:     +document.getElementById('projNumUnits')?.value || null,
+    buildingKind:  document.getElementById('projBuildingKind')?.value || null,
+    hasTG:         document.getElementById('projHasTG')?.value || null,
+    projectType:   document.getElementById('projType')?.value || null,
+    finishStandard: document.getElementById('projFinish')?.value || null,
+  };
+
   const response = await fetch('/api/analyze-plan', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -2554,7 +2634,8 @@ WICHTIG:
         name: f.name,
         base64: f.base64,
         mediaType
-      }
+      },
+      projectContext
     })
   });
 
@@ -3891,6 +3972,7 @@ function goTo(page) {
   if (page==='summary')     buildSummary();
   if (page==='excavation')  initExcavation();
   if (page==='projects')    { renderProjectsList(); updateProjectCount(); }
+  if (page==='project')     updatePlanContextBanner();
   if (page==='utilization') initUtilization();
   if (page==='prices') {
     renderPriceEditor();
@@ -3898,6 +3980,76 @@ function goTo(page) {
     syncCustomPricesFromDB(loadPriceDB());
   }
 }
+
+// ─── PLAN-CONTEXT-BANNER: zeigt Warnung wenn Projekt-Struktur fehlt ───────────
+// Verhindert, dass der User die KI-Analyse ohne Gebäude/Wohnungs-Vorgabe startet
+function updatePlanContextBanner() {
+  const banner  = document.getElementById('planContextBanner');
+  const missing = document.getElementById('planContextMissing');
+  if (!banner || !missing) return;
+
+  const pname = document.getElementById('projName')?.value?.trim() || '';
+  const pnum  = document.getElementById('projNum')?.value?.trim() || '';
+  const numB  = +document.getElementById('projNumBuildings')?.value || 0;
+  const numU  = +document.getElementById('projNumUnits')?.value || 0;
+
+  const miss = [];
+  if (!pname) miss.push('Projektname');
+  if (!pnum)  miss.push('Forol-Projektnummer');
+  if (!numB || numB < 1) miss.push('Anzahl Gebäude');
+  if (!numU || numU < 1) miss.push('Anzahl Wohnungen');
+
+  if (miss.length === 0) {
+    // Alles ausgefüllt — Banner GRÜN zeigen als Bestätigung
+    banner.style.display     = 'block';
+    banner.style.background  = '#e8f5e9';
+    banner.style.borderColor = '#2e7d32';
+    banner.style.color       = '#1b5e20';
+    banner.innerHTML = `<strong>✅ Projekt-Struktur erfasst</strong> —
+      <span style="font-weight:600">${pname}</span> (${pnum}) ·
+      <span style="font-weight:600">${numB}</span> Gebäude ·
+      <span style="font-weight:600">${numU}</span> Wohnungen.
+      <br><span style="font-size:0.78rem;font-weight:400">Die KI wird die Pläne entsprechend diesen Vorgaben interpretieren.</span>`;
+  } else {
+    // Fehlende Felder anzeigen
+    banner.style.display     = 'block';
+    banner.style.background  = '#fff3e0';
+    banner.style.borderColor = '#ff9800';
+    banner.style.color       = '#e65100';
+    missing.textContent = 'Fehlend: ' + miss.join(', ');
+    banner.innerHTML = `<strong>⚠️ Projektdaten unvollständig</strong><br>
+      <span>Fehlend: ${miss.join(', ')}</span><br>
+      <span style="font-size:0.78rem">Diese Angaben helfen der KI, die Pläne korrekt zu interpretieren — andernfalls zählt die KI oft jeden Plan (EG/OG/Fassade) als separates Gebäude.</span>
+      <div style="margin-top:0.5rem;display:flex;gap:0.5rem;flex-wrap:wrap">
+        <button onclick="document.getElementById('projName').focus();window.scrollTo({top:document.querySelector('#projName').offsetTop-100,behavior:'smooth'})"
+          style="background:#ff9800;color:white;border:none;padding:0.4rem 0.9rem;border-radius:4px;font-size:0.82rem;cursor:pointer;font-weight:600">
+          → Jetzt ergänzen
+        </button>
+      </div>`;
+  }
+}
+
+// Live-Update: bei jeder Eingabe in den Projekt-Struktur-Feldern neu prüfen
+(function attachPlanContextListeners() {
+  const ids = ['projName','projNum','projNumBuildings','projNumUnits','projBuildingKind','projHasTG','projDesc'];
+  ids.forEach(id => {
+    document.addEventListener('DOMContentLoaded', () => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.addEventListener('input',  updatePlanContextBanner);
+        el.addEventListener('change', updatePlanContextBanner);
+      }
+    });
+    // Auch sofort wenn DOM schon bereit ist
+    if (document.readyState !== 'loading') {
+      const el = document.getElementById(id);
+      if (el) {
+        el.addEventListener('input',  updatePlanContextBanner);
+        el.addEventListener('change', updatePlanContextBanner);
+      }
+    }
+  });
+})();
 
 // ─── ERDMASSEN-KALKULATOR ─────────────────────────────────────────────────
 function initExcavation() {
@@ -4798,6 +4950,12 @@ function saveProject() {
     parcelArea:  +document.getElementById('parcelArea').value || 0,
     projType:    document.getElementById('projType')?.value || 'new',
     projFinish:  document.getElementById('projFinish')?.value || 'std',
+    // Neue Projekt-Struktur-Felder (wichtig für KI-Plan-Analyse)
+    projDesc:         document.getElementById('projDesc')?.value || '',
+    projNumBuildings: +document.getElementById('projNumBuildings')?.value || 1,
+    projNumUnits:     +document.getElementById('projNumUnits')?.value || 1,
+    projBuildingKind: document.getElementById('projBuildingKind')?.value || 'MFH',
+    projHasTG:        document.getElementById('projHasTG')?.value || 'unknown',
     metrics: {
       footprint:       totalFP,
       gfa:             totalGFA,
@@ -4899,6 +5057,12 @@ function loadProject(id) {
   document.getElementById('parcelArea').value   = p.parcelArea || '';
   if (document.getElementById('projType'))   document.getElementById('projType').value   = p.projType   || 'new';
   if (document.getElementById('projFinish')) document.getElementById('projFinish').value = p.projFinish || 'std';
+  // Projekt-Struktur-Felder
+  if (document.getElementById('projDesc'))         document.getElementById('projDesc').value         = p.projDesc || '';
+  if (document.getElementById('projNumBuildings')) document.getElementById('projNumBuildings').value = p.projNumBuildings || 1;
+  if (document.getElementById('projNumUnits'))     document.getElementById('projNumUnits').value     = p.projNumUnits || 1;
+  if (document.getElementById('projBuildingKind')) document.getElementById('projBuildingKind').value = p.projBuildingKind || 'MFH';
+  if (document.getElementById('projHasTG'))        document.getElementById('projHasTG').value        = p.projHasTG || 'unknown';
 
   // Restore region card highlight
   document.querySelectorAll('.rcard').forEach(c => c.classList.remove('sel'));
@@ -4950,10 +5114,15 @@ function newProject() {
   const ar = document.getElementById('aiResult');
   if (ar) ar.innerHTML = '';
 
-  ['projName','projNum','projClient','projLocation','parcelArea'].forEach(id => {
+  ['projName','projNum','projClient','projLocation','parcelArea','projDesc'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
+  // Reset structure fields to defaults
+  const bInp = document.getElementById('projNumBuildings'); if (bInp) bInp.value = 1;
+  const uInp = document.getElementById('projNumUnits');     if (uInp) uInp.value = 1;
+  const kInp = document.getElementById('projBuildingKind'); if (kInp) kInp.value = 'MFH';
+  const tInp = document.getElementById('projHasTG');        if (tInp) tInp.value = 'unknown';
   document.querySelectorAll('.rcard').forEach(c => c.classList.remove('sel'));
   const tg = document.querySelector('.rcard[data-r="TG"]');
   if (tg) tg.classList.add('sel');

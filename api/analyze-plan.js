@@ -366,7 +366,7 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') { res.status(204).end(); return; }
   if (req.method !== 'POST') { res.status(405).json({ error: 'Method not allowed' }); return; }
 
-  const { file } = req.body || {};
+  const { file, projectContext } = req.body || {};
   if (!file?.base64 || !file?.mediaType) {
     return res.status(400).json({ error: 'Kein Dateiinhalt übergeben' });
   }
@@ -374,6 +374,27 @@ export default async function handler(req, res) {
   const isPDF = file.mediaType === 'application/pdf';
 
 const systemPrompt = `Du bist Schweizer Bauingenieur, Architekt und Ausmass-Spezialist mit Expertise in SIA 416, SIA 451, BKP/eBKP-H und CRB-Normpositionen.
+
+═══════════════════════════════════════════════════════════════════════════════
+META-REGEL — HÖCHSTE PRIORITÄT:
+═══════════════════════════════════════════════════════════════════════════════
+
+Wenn der User einen PROJEKT-CONTEXT vorgibt (siehe User-Nachricht: Anzahl Gebäude,
+Anzahl Wohnungen, Gebäudeart, Tiefgarage ja/nein), dann sind diese Angaben
+VERBINDLICH und haben Vorrang vor deinen eigenen Interpretationen.
+
+→ Wenn User sagt "2 Gebäude" → anzahl_gebaeude = 2 (auch wenn du im Plan
+   mehrere Ansichten siehst — das sind Ansichten DERSELBEN 2 Gebäude).
+→ Wenn User sagt "10 Wohnungen" → anzahl_wohnungen_total = 10 und verteilt
+   auf die angegebene Anzahl Gebäude (bei 2 Gebäuden: je 5 Wohnungen).
+→ Wenn User sagt "Gebäudeart: MFH" → erwarte mehrere gleiche Wohnungen
+   über mehrere Geschosse desselben Gebäudes.
+→ Wenn User sagt "Tiefgarage: ja" → suche aktiv nach TG im Plan und
+   berechne Aushub.
+
+Du darfst vom User-Kontext NUR abweichen wenn die Pläne eindeutig zeigen, dass
+die User-Angabe falsch ist. In diesem Fall: vermerke dies in "bemerkungen"
+und bleibe bei der User-Vorgabe im Haupt-Return (der User korrigiert sonst manuell).
 
 ═══════════════════════════════════════════════════════════════════════════════
 KRITISCHE REGELN — IMMER BEACHTEN:
@@ -562,7 +583,35 @@ REGELN:
 Deine Antwort muss alle Felder des Schemas MAXIMAL befüllt zurückgeben. Leere Arrays und null-Werte nur, wenn das Element real nicht im Plan ist.`;
 
 
+  // ─── Projekt-Context aus User-Vorgabe als Vorab-Instruktion ────────────────
+  const hasContext = projectContext && (projectContext.numBuildings || projectContext.numUnits);
+  const buildingKindLabel = {
+    EFH: 'Einfamilienhaus',
+    ZFH: 'Zweifamilienhaus',
+    MFH: 'Mehrfamilienhaus',
+    RH:  'Reiheneinfamilienhäuser',
+    UEB: 'Überbauung (mehrere Gebäude)',
+    GEW: 'Gewerbe',
+    MIX: 'Wohnen + Gewerbe gemischt',
+  };
+
+  const contextBlock = hasContext ? `PROJEKT-CONTEXT (vom Projektleiter bestätigte Fakten — diese sind verbindlich!):
+${projectContext.name ? `• Projekt: ${projectContext.name}\n` : ''}${projectContext.number ? `• Forol-Nr.: ${projectContext.number}\n` : ''}${projectContext.description ? `• Beschreibung: ${projectContext.description}\n` : ''}${projectContext.numBuildings ? `• ⚠️ ANZAHL GEBÄUDE: ${projectContext.numBuildings} (EXAKT diese Anzahl — kein Plan ist ein Gebäude!)\n` : ''}${projectContext.numUnits ? `• ⚠️ ANZAHL WOHNUNGEN TOTAL: ${projectContext.numUnits}\n` : ''}${projectContext.buildingKind ? `• Gebäudeart: ${buildingKindLabel[projectContext.buildingKind] || projectContext.buildingKind}\n` : ''}${projectContext.hasTG === 'yes' ? `• Tiefgarage: vorhanden\n` : projectContext.hasTG === 'no' ? `• Tiefgarage: keine\n` : ''}${projectContext.finishStandard ? `• Ausbaustandard: ${projectContext.finishStandard}\n` : ''}
+WICHTIG: Die Anzahl Gebäude und Wohnungen ist vom Projektleiter verbindlich vorgegeben.
+Nutze diese Information um die Pläne korrekt zu gruppieren:
+- Wenn mehrere Grundrisse gleich aussehen → gehören zum selben Gebäude (nur Geschosse unterschiedlich)
+- Wenn ${projectContext.numBuildings || 'N'} Gebäude vorgegeben sind und du im Plan N verschiedene Layouts siehst → das sind die Gebäude
+- Wenn ${projectContext.numUnits || 'M'} Wohnungen vorgegeben sind → diese verteilen sich auf die ${projectContext.numBuildings || 'N'} Gebäude
+- Jede Wohnung erhält eine eindeutige Kennzeichnung mit Gebäude-Zuordnung (z.B. "Haus A / EG links", "Haus B / OG2")
+
+Rückgabe:
+- anzahl_gebaeude = ${projectContext.numBuildings || '(aus Plan ermitteln)'}
+- anzahl_wohnungen_total = ${projectContext.numUnits || '(aus Plan ermitteln)'}
+
+` : '';
+
   const contentParts = [
+    ...(contextBlock ? [{ type: 'text', text: contextBlock }] : []),
     isPDF
       ? { type: 'file',  data: file.base64, mediaType: 'application/pdf', filename: file.name || 'plan.pdf' }
       : { type: 'image', image: file.base64, mediaType: file.mediaType },
@@ -570,32 +619,31 @@ Deine Antwort muss alle Felder des Schemas MAXIMAL befüllt zurückgeben. Leere 
       type: 'text',
       text: `Analysiere diesen Bauplan (${file.name || 'Plan'}) vollständig.
 
+${hasContext ? `BESTÄTIGUNG: Das Projekt hat ${projectContext.numBuildings || '?'} Gebäude und ${projectContext.numUnits || '?'} Wohnungen total. Verwende diese Fakten.` : ''}
+
 KRITISCHE GEGENPRÜFUNG vor der Rückgabe:
 
-1. GEBÄUDE: Ist die Anzahl plausibel?
+1. GEBÄUDE: Stimmt deine Anzahl mit der Projekt-Vorgabe überein?
    Mehrere Grundrisse desselben Gebäudes (EG/OG/UG) = EIN Gebäude.
    Mehrere Fassaden-Ansichten (Nord/Süd/Ost/West) = EIN Gebäude.
    Zähle nur physische Häuser — NICHT Pläne.
-   Situationsplan prüfen: wie viele Häuser stehen dort?
 
-2. WOHNUNGEN: Sind diese den Gebäuden korrekt zugeordnet?
-   Beispiel: 2 Gebäude × 5 Wohnungen = 10 Wohnungen total.
+2. WOHNUNGEN: Korrekt auf Gebäude verteilt?
    Jede Wohnung hat eindeutige ID mit Gebäude-Zuordnung.
 
 3. RÄUME: Hat jeder Raum eine Wohnung-Zuordnung?
    Bad/Küche/WC/Zimmer → wohnung-Feld muss gefüllt sein bei MFH.
 
-4. BAD-WANDFLÄCHEN: Berechnet du die 4 Wände?
-   flaeche_wand_m2 = Raumumfang × Raumhöhe - Öffnungen
+4. BAD-WANDFLÄCHEN: flaeche_wand_m2 = Raumumfang × Raumhöhe - Öffnungen
    plattenbelag_bad_m2 = Boden + (Umfang × 2.20m - Öffnungen)
 
 5. Du bist Ingenieur — nicht Scanner.
    Lies ALLE sichtbaren Bemassungen zuerst ab.
    Berechne fehlende Masse aus Proportionen.
-   Nutze SIA-Standardmasse als Fallback mit Vermerk in "bemerkungen".
+   SIA-Standardmasse als Fallback mit Vermerk in "bemerkungen".
 
 null ist nur erlaubt wenn das Element real nicht im Plan ist.
-NIEMALS null bei fehlender expliziter Bemassung wenn proportional berechenbar.`,
+NIEMALS null bei fehlender Bemassung wenn proportional berechenbar.`,
     },
   ];
 
@@ -612,7 +660,7 @@ NIEMALS null bei fehlender expliziter Bemassung wenn proportional berechenbar.`,
     });
 
     // ─── POST-PROCESSING: Fehler-Korrektur ────────────────────────────────
-    const cleaned = postProcess(object);
+    const cleaned = postProcess(object, projectContext);
     return res.status(200).json({ result: cleaned });
 
   } catch (err) {
@@ -627,8 +675,12 @@ NIEMALS null bei fehlender expliziter Bemassung wenn proportional berechenbar.`,
 // 2. Wandflächen-Berechnung nachziehen wenn fehlend
 // 3. Plattenbelag-Berechnung für Bäder
 
-function postProcess(data) {
+function postProcess(data, projectContext) {
   if (!data || typeof data !== 'object') return data;
+
+  // ─── 0. USER-KONTEXT HAT VORRANG (neue Ground-Truth) ────────────────────────
+  const userNumBuildings = projectContext?.numBuildings || 0;
+  const userNumUnits     = projectContext?.numUnits || 0;
 
   // ─── 1. GEBÄUDE-DEDUPLIZIERUNG ──────────────────────────────────────────────
   // Wenn Modell mehr Gebäude zurückgibt als sinnvoll, dedup nach Bezeichnung
@@ -670,7 +722,83 @@ function postProcess(data) {
 
     if (before !== data.gebaeude.length) {
       data.bemerkungen = (data.bemerkungen ? data.bemerkungen + ' · ' : '') +
-        `Gebäude dedupliziert: ${before} → ${data.gebaeude.length} (gleiche Geometrie/Bezeichnung zusammengefasst)`;
+        `Gebäude dedupliziert: ${before} → ${data.gebaeude.length} (gleiche Geometrie/Bezeichnung)`;
+    }
+  }
+
+  // ─── 1b. HARTE KORREKTUR auf User-Vorgabe ──────────────────────────────────
+  // Wenn User-Kontext gesetzt ist, wird KI-Ergebnis IMMER auf die
+  // vorgegebene Anzahl Gebäude reduziert/erweitert
+  if (userNumBuildings > 0 && Array.isArray(data.gebaeude)) {
+    const kiCount = data.gebaeude.length;
+
+    if (kiCount > userNumBuildings) {
+      // KI hat zu viele → die ähnlichsten zusammenführen
+      // Sortiere nach Geometrie-Grösse und nimm die grössten N Gebäude,
+      // merge die restlichen in das jeweils ähnlichste
+      const sorted = [...data.gebaeude].sort((a, b) => {
+        const areaA = (a.laenge_m || 0) * (a.breite_m || 0);
+        const areaB = (b.laenge_m || 0) * (b.breite_m || 0);
+        return areaB - areaA;
+      });
+      const keepers = sorted.slice(0, userNumBuildings);
+      const extras  = sorted.slice(userNumBuildings);
+
+      // Jedes "extra" Gebäude in den ähnlichsten Keeper mergen
+      extras.forEach(extra => {
+        const target = keepers.reduce((best, k) => {
+          const dA = Math.abs((k.laenge_m||0) - (extra.laenge_m||0)) +
+                     Math.abs((k.breite_m||0) - (extra.breite_m||0));
+          const dB = Math.abs((best.laenge_m||0) - (extra.laenge_m||0)) +
+                     Math.abs((best.breite_m||0) - (extra.breite_m||0));
+          return dA < dB ? k : best;
+        }, keepers[0]);
+
+        // Fehlende Felder in target ergänzen
+        Object.keys(extra).forEach(k => {
+          if (target[k] == null && extra[k] != null) target[k] = extra[k];
+        });
+      });
+
+      data.gebaeude = keepers;
+      data.anzahl_gebaeude = userNumBuildings;
+      data.bemerkungen = (data.bemerkungen ? data.bemerkungen + ' · ' : '') +
+        `⚠️ KI-Korrektur: ${kiCount} erkannt → ${userNumBuildings} (User-Vorgabe)`;
+
+    } else if (kiCount < userNumBuildings) {
+      // KI hat zu wenige → fülle auf mit Kopien des ersten Gebäudes
+      const template = data.gebaeude[0] || { bezeichnung: 'Haus' };
+      while (data.gebaeude.length < userNumBuildings) {
+        const idx = data.gebaeude.length;
+        const name = String.fromCharCode(65 + idx); // A, B, C, ...
+        data.gebaeude.push({
+          ...template,
+          bezeichnung: `Haus ${name}`,
+        });
+      }
+      data.anzahl_gebaeude = userNumBuildings;
+      data.bemerkungen = (data.bemerkungen ? data.bemerkungen + ' · ' : '') +
+        `⚠️ KI-Korrektur: ${kiCount} erkannt → ${userNumBuildings} (User-Vorgabe, fehlende aufgefüllt)`;
+    } else {
+      data.anzahl_gebaeude = userNumBuildings;
+    }
+  }
+
+  // ─── 1c. WOHNUNGEN-VERTEILUNG ──────────────────────────────────────────────
+  if (userNumUnits > 0 && Array.isArray(data.gebaeude) && data.gebaeude.length > 0) {
+    const currentUnitSum = data.gebaeude.reduce((s, g) => s + (g.anzahl_wohnungen || 0), 0);
+    if (Math.abs(currentUnitSum - userNumUnits) > 0) {
+      // Gleichmässig verteilen
+      const perBuilding = Math.floor(userNumUnits / data.gebaeude.length);
+      const remainder   = userNumUnits % data.gebaeude.length;
+      data.gebaeude.forEach((g, i) => {
+        g.anzahl_wohnungen = perBuilding + (i < remainder ? 1 : 0);
+      });
+      data.anzahl_wohnungen_total = userNumUnits;
+      data.bemerkungen = (data.bemerkungen ? data.bemerkungen + ' · ' : '') +
+        `Wohnungen auf ${data.gebaeude.length} Gebäude verteilt (${userNumUnits} total)`;
+    } else {
+      data.anzahl_wohnungen_total = userNumUnits;
     }
   }
 
