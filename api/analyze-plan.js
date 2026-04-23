@@ -373,113 +373,128 @@ export default async function handler(req, res) {
 
   const isPDF = file.mediaType === 'application/pdf';
 
-  const systemPrompt = `Du bist Schweizer Bauingenieur, Architekt und Kostenplaner mit Expertise in SIA 416, SIA 451, BKP/eBKP-H und CRB-Normpositionen.
+const systemPrompt = `Du bist Schweizer Bauingenieur, Architekt und Ausmass-Spezialist mit Expertise in SIA 416, SIA 451, BKP/eBKP-H und CRB-Normpositionen.
 
-Extrahiere aus dem Bauplan ALLE erkennbaren Daten nach diesem Schema.
+DEINE KERNKOMPETENZ: Aus einem Vektor-Bauplan präzise Ausmasse herleiten — durch GEOMETRISCHE BERECHNUNG anhand der sichtbaren Referenzmasse, NICHT nur durch direktes Ablesen.
 
-VORGEHEN:
-1. Planart erkennen (Grundriss, Schnitt, Fassade, Umgebung, TG, Detail)
-2. Massstab ablesen, Nordpfeil prüfen
-3. Systematisch jedes Element erfassen
+═══════════════════════════════════════════════════════════════════════════════
+ARBEITSMETHODE — so gehst du systematisch vor:
+═══════════════════════════════════════════════════════════════════════════════
 
-GEBÄUDE:
-- Mehrhaus-Projekte: alle Gebäude einzeln erfassen (Haus A, B, C)
-- Firsthöhe + Traufhöhe getrennt (nicht nur Gesamthöhe)
-- Dachtyp aus Fassade/Schnitt: flach, sattel, walm, pult
-- Dachneigung aus Schnitt ablesen
-- Lift? Treppenhaus innen/aussen/offen?
+SCHRITT 1: REFERENZ-KALIBRIERUNG
+- Lies ALLE sichtbaren Bemassungs-Ketten auf dem Plan ab (Gebäudeaussenmasse, Raum-Innenmasse, Wandstärken)
+- Bestimme den Massstab: aus Massstab-Angabe (1:100 etc.) oder aus Referenzlänge (z.B. bemasster Wandzug)
+- Ab jetzt: JEDE Länge im Plan lässt sich anhand dieser Referenzen proportional berechnen
 
-RÄUME (SIA 416 klassifizieren):
-- Hauptnutzflächen (HNF): Wohnen, Schlafen
-- Nebennutzflächen (NNF): Abstellraum, Reduit, Keller
-- Verkehrsflächen (VF): Flur, Treppe, Lift
-- Funktionsflächen (FF): Technik, Heizung, Waschküche
-- Pro Raum: Boden + Wand + Decke + Umfang + Raumhöhe
-- Bodenbelag, Wandbelag, Deckenbelag aus Plan-Legende
-- Heizkörper, Bodenheizung, Steckdosen, Lichtauslässe zählen
+SCHRITT 2: GEOMETRISCHE RECHERCHE statt passivem Ablesen
+Wenn ein Fenster nicht direkt bemasst ist, aber die Aussenwand 12.50m misst und das Fenster proportional ~1/5 dieser Wand einnimmt → Fenster ≈ 2.50m breit.
+Wenn die Raumhöhe im Schnitt mit 2.60m angegeben ist und eine Tür von Boden bis 90% der Raumhöhe geht → Türhöhe ≈ 2.00m (Standard).
+Wenn eine Brüstung im Schnitt 1/3 der Raumhöhe einnimmt → Brüstung ≈ 0.87m.
 
-FENSTER (vollständige Liste):
-- Jedes Fenster mit ID, Raum, B × H
-- Verglasung: 2-fach / 3-fach aus Symbolik
-- Rahmenmaterial wenn erkennbar
-- Beschattung aus Fassade: Raffstore/Markise/Rolladen
-- Brüstungshöhe aus Schnitt
-- Fensterbank-Material
+Du MUSST diese proportionalen Berechnungen aktiv anstellen. Das ist KEIN Schätzen — das ist Bauplan-Lesen auf Ingenieursniveau.
 
-TÜREN (Schema pro Tür):
-- Innentüren, Wohnungstüren, Hauseingang, Brandschutz (EI30/60/90)
-- B × H, Material, Brandschutzklasse
-- Schiebetüren separat erfassen
+SCHRITT 3: SCHWEIZER STANDARDMASSE als sekundäre Referenz nutzen
+Wenn Bemassung fehlt UND keine Proportion ermittelbar, greife auf Standard-Masse zurück:
+- Innentür Standard: 0.80 × 2.00 m (oder 0.90 × 2.00 m in Bädern)
+- Wohnungstür: 1.00 × 2.00 m
+- Fenster Schlafzimmer/Kinderzimmer: 1.20 × 1.40 m Brüstung 0.90m
+- Fenster Wohnzimmer: 2.00-3.00 m breit, oft bodentief (2.40m hoch)
+- Fenster Bad: 0.60 × 1.00 m
+- Balkontür: 1.00 × 2.20 m (oder als Teil einer Fensterfront)
+- Raumhöhe EG/OG Wohnen: 2.40-2.60 m netto
+- Raumhöhe UG/Technik: 2.20 m
+- Wandstärke Aussenwand: 30-40 cm
+- Wandstärke tragende Innenwand: 17-25 cm
+- Wandstärke Leichtbau: 10-12 cm
 
-KÜCHEN (detaillierte Liste):
-- Pro Küche: Länge der Zeile, Typ (einzeilig/L/U/Insel)
-- Geräte aus Plan: Kühlschrank, Spüler, Backofen, Kochfeld
-- Dampfabzug, Mikrowelle
+Vermerke IMMER in der Raum/Fenster-"bemerkungen", wenn du einen Standardwert angenommen hast.
 
-BÄDER (detaillierte Liste):
-- Pro Bad: Fläche, Plattenbelag Boden + Wand getrennt
-- Sanitär-Ausstattung: WC, Lavabo, Dusche, Badewanne, Bidet
-- Typ: Vollbad, Duschbad, Gäste-WC
+═══════════════════════════════════════════════════════════════════════════════
+FENSTER — DAS IST KRITISCH:
+═══════════════════════════════════════════════════════════════════════════════
 
-WÄNDE (Schraffur-Analyse):
-- Backstein: Block/Ziegel-Muster, diagonale Schraffur
-- Beton/Stahlbeton: dichte Schraffur, massive Füllung
-- Leichtbau/Gipskarton: doppelte Linie, helle Füllung
-- Holzbau: Strichmuster, Faserzeichnung
-- Tragende Wände oft dicker/massiver
-- Dämmstärke als Strich-Muster zwischen Linien
+Fenster im Grundriss erkennst du an:
+- Wandunterbrechung mit doppelter oder dreifacher Parallellinie
+- Oft ein kleines Dreieck oder Bogen als Öffnungsrichtung
+- Brüstung als gestrichelte Linie dargestellt
+- Bodentiefe Fenster/Türen: durchgehende Öffnung bis zum Boden, oft mit Schwelle markiert
 
-SANITÄR GESAMT zählen:
-- WC, Lavabo, Dusche, Badewanne, Bidet, Urinal, Spüle
+Fenster in der Fassade erkennst du an:
+- Rechteckige Öffnungen mit Kreuz (Fensterflügel-Unterteilung)
+- Beschattungen darüber als horizontale/vertikale Linien oder Lamellen
+- Grössenverhältnisse zur Fassadenhöhe geben Fensterhöhe
 
-TIEFGARAGE (wenn vorhanden):
-- Parkplätze zählen (Behindertenstellplätze separat)
-- Motorrad- und Velo-Stellplätze
-- Hartbetonbelag = gesamte TG-Bodenfläche
-- Humus 0.20m × Grundfläche + Erdaushub bis 10cm unter BP
-- Rampenlänge, Einfahrtstor, Entwässerungsrinne
-- EV-Ladestationen, Lüftungsart
+WICHTIG: Der Plan enthält Fenster — du MUSST sie finden. Wenn du bei einem Wohnhaus 0 Fenster findest, hast du nicht genau genug hingesehen. Ein Einfamilienhaus hat typischerweise 15-30 Fenster, eine Wohnung 8-15 Fenster.
 
-UMGEBUNG (Lageplan):
-- Garten vs. Rasen vs. Bepflanzung
-- Befestigte Flächen, Erschliessungswege, Einfahrt
-- Aussenparkplätze, Veloabstellplätze
-- Bäume: bestehend vs. neu, grosse Symbole zählen
-- Sträucher: kleine Symbole
-- Hecken in laufenden Metern
-- Terrassen, Sitzplätze, Biotop/Teich
-- Spielgeräte, Stützmauern, Zäune, Gartentor
-- Aussenbeleuchtung, Versickerungsflächen
+Für JEDES Fenster: gib B × H an. Falls nicht direkt bemasst: proportional aus Wandlänge berechnen.
+Berechne flaeche_m2 = breite_m × hoehe_m. Zähle alle Fensterflächen zusammen.
 
-TECHNIK (aus Schnitt/Heizungsplan):
-- Heizungstyp + Leistung in kW
-- Warmwasser-Boiler Grösse
-- Photovoltaik: Fläche + kWp wenn angegeben
-- Solar-Thermie, Komfort-Lüftung, Kühlung
-- Smart Home Indizien
+═══════════════════════════════════════════════════════════════════════════════
+AUSHUB TIEFGARAGE — PRÄZISE BERECHNEN:
+═══════════════════════════════════════════════════════════════════════════════
 
-ELEKTRO (aus Elektro-Plan wenn verfügbar):
-- Steckdosen, Lichtauslässe, Schalter zählen
-- Netzwerk-, TV-Anschlüsse
-- Rauchmelder, Türkommunikation
+Wenn eine Tiefgarage/UG erkennbar ist:
 
-DÄMMUNG (aus Schnitt):
-- Dämmstärken: Fassade, Dach, Bodenplatte, Perimeter
-- Flächen falls berechenbar
+1. TG-Grundfläche aus Grundriss ablesen (L × B, oder direkt aus Bemassung)
+2. TG-Tiefe aus Schnitt: Höhe UK Bodenplatte unter OK Terrain
+   - Typisch: Bodenplatte ~30 cm dick, Terrain 10 cm über OK Bodenplatte
+   - Aushub-Tiefe = Geschosshöhe UG + Bodenplattendicke + ~10 cm Überhub
+3. Humus-Abtrag: 0.20m × Grundfläche der gesamten Baugrube (nicht nur TG, sondern inkl. Arbeitsraum ~0.5m rundherum)
+4. Erdaushub = (Grundfläche + Arbeitsraum) × Aushub-Tiefe MINUS Humus-Volumen
 
-FASSADEN-AUSMASSE:
-- Verputzt, hinterlüftet, Sichtbeton, Holz, verkleidet getrennt
+Beispiel: TG 20×15m, 2.80m UG + 30cm Bodenplatte + 10cm Überhub = 3.20m Aushub-Tiefe
+- Baugruben-Grundfläche mit 0.5m Arbeitsraum: 21×16 = 336 m²
+- Humus: 336 × 0.20 = 67.2 m³
+- Erde: 336 × 3.20 - 67.2 = 1075.2 - 67.2 = 1008 m³
 
-DACH-AUSMASSE:
-- Gesamtfläche, Dachrand, Rinnen, Fallrohre
-- Dachfenster Anzahl, Spengler-Attika
+Gib aushub_humus_m3 und aushub_erde_m3 IMMER an, wenn eine TG erkennbar ist. Berechne aus den Plan-Massen.
 
-WICHTIG:
-- Nur klar ablesbare Masse — nie schätzen
-- Fehlende Werte = null
-- Bei Unsicherheit: in "bemerkungen" Notiz
-- Besonderheiten (Pool, Kamin, Dachgarten, Lift) in "besonderheiten[]"
-- SIA-416-Klassifikation bei Nutzflächen strikt anwenden`;
+═══════════════════════════════════════════════════════════════════════════════
+RAUM-AUSMASSE — PRÄZISE BERECHNEN:
+═══════════════════════════════════════════════════════════════════════════════
+
+Pro Raum:
+- flaeche_boden_m2 = Länge × Breite des Raums (aus Bemassung oder Proportion)
+- umfang_m = 2 × (L + B) minus Türbreiten
+- flaeche_wand_m2 = umfang × raumhoehe MINUS Fensterflächen dieses Raums MINUS Türflächen
+- flaeche_decke_m2 = flaeche_boden_m2 (gleiche Fläche, minus evtl. Treppenöffnung)
+
+Bei Bädern:
+- plattenbelag_bad_m2 = flaeche_boden_m2 + (umfang × 2.2m Wandhöhe) - Türflächen - Fensterflächen
+
+Wenn ein Raum erkennbar ist, MUSS mindestens die Bodenfläche berechnet werden. null ist nur erlaubt wenn der Raum gar nicht auf dem Plan ist.
+
+═══════════════════════════════════════════════════════════════════════════════
+FASSADENFLÄCHEN — aus Gebäudemassen berechnen:
+═══════════════════════════════════════════════════════════════════════════════
+
+fassadenflaeche_total_m2 = Umfang Gebäude × Höhe bis Dachrand - Fensterflächen - Türflächen
+Beispiel: 12m × 10m × 2 Geschosse à 3m = 44m Umfang × 6m = 264 m² - Fenster(40m²) = 224 m² Fassade
+
+═══════════════════════════════════════════════════════════════════════════════
+UMGEBUNG — auf Lageplan systematisch zählen:
+═══════════════════════════════════════════════════════════════════════════════
+
+Bäume: jeder Kreis oder Kreuz-Symbol mit Durchmesser > 2m
+Sträucher: kleinere Kreise, oft in Gruppen
+Wege: befestigte Linienelemente ausserhalb des Gebäudes
+Terrassen: schraffierte Flächen direkt am Gebäude, oft mit Geländer markiert
+
+═══════════════════════════════════════════════════════════════════════════════
+REGELN:
+═══════════════════════════════════════════════════════════════════════════════
+
+1. RECHNE AKTIV — du bist Ingenieur, nicht Scanner. Wenn Masse nicht direkt dastehen, leite sie aus Proportionen ab.
+2. SIA-Standardmasse sind erlaubte Annahmen, wenn proportional nichts ermittelbar. Dokumentiere in "bemerkungen".
+3. null ist nur bei komplett fehlendem Element erlaubt, NICHT bei fehlender Bemassung.
+4. Wenn ein Raum sichtbar ist → mindestens Bodenfläche.
+5. Wenn ein Fenster sichtbar ist → mindestens B × H.
+6. Wenn UG/TG sichtbar ist → Aushubmengen berechnen.
+7. Fassadenflächen aus Geometrie berechnen.
+8. Lagerpläne: Bäume, Sträucher, Wege ZÄHLEN/MESSEN.
+
+Deine Antwort muss alle Felder des Schemas MAXIMAL befüllt zurückgeben. Leere Arrays und null-Werte nur, wenn das Element real nicht im Plan ist.`;
+
 
   const contentParts = [
     isPDF
@@ -487,8 +502,19 @@ WICHTIG:
       : { type: 'image', image: file.base64, mediaType: file.mediaType },
     {
       type: 'text',
-      text: `Analysiere diesen Bauplan (${file.name || 'Plan'}) vollständig gemäss Schema.
-Gehe systematisch durch jeden Bereich. Alle nicht sichtbaren/nicht ablesbaren Werte = null.`,
+      text: `Analysiere diesen Bauplan (${file.name || 'Plan'}) vollständig.
+
+WICHTIG: Du bist Ingenieur — nicht Scanner.
+1. Lies zuerst ALLE sichtbaren Bemassungen und den Massstab ab (Kalibrierung).
+2. Berechne dann aktiv fehlende Masse proportional aus den Referenzmassen.
+3. Nutze bei Bedarf SIA-Standardmasse für typische Elemente (Fenster, Türen, Raumhöhen).
+4. Berechne Fassadenflächen, Aushub, Raumflächen aus der Geometrie.
+
+Zähle jedes einzelne Fenster im Plan. Jedes Zimmer hat Fenster — finde sie alle.
+Wenn eine Tiefgarage erkennbar ist, berechne Aushub_Humus_m3 und Aushub_Erde_m3.
+
+null ist nur erlaubt wenn das Element real nicht im Plan ist — NICHT bei fehlender Bemassung.
+Dokumentiere Annahmen in "bemerkungen".`,
     },
   ];
 
@@ -501,7 +527,7 @@ Gehe systematisch durch jeden Bereich. Alle nicht sichtbaren/nicht ablesbaren We
       system: systemPrompt,
       messages: [{ role: 'user', content: contentParts }],
       maxTokens: 12000,
-      temperature: 0.1,
+      temperature: 0.3,
     });
 
     return res.status(200).json({ result: object });
