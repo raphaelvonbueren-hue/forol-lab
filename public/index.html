@@ -2571,51 +2571,122 @@ WICHTIG:
 // ─── MERGE MULTIPLE PLAN RESULTS ─────────────────────────────────────────
 function mergeAnalysisResults(results) {
   const merged = {
+    planTypes: [],
+    anzahl_gebaeude: 0,
+    gebaeude: [],
     raeume: [],
     fenster: [],
-    tueren: { innen: 0, aussen: 0, balkon_terrasse: 0 },
-    masse: { nettowohnflaeche_m2: 0, bruttogrundrissflaeche_m2: 0, fassadenflaeche_m2: 0 },
-    gebaeude: { laenge: null, breite: null, hoehe_gesamt: null, anzahl_geschosse: null },
-    planTypes: []
+    waende: [],
+    tueren: [],
+    tueren_total: { innen: 0, wohnungstuer: 0, hauseingang: 0, balkon_terrasse: 0, gesamt: 0 },
+    anzahl_kuechen: 0,
+    anzahl_baeder: 0,
+    anzahl_wc: 0,
+    tiefgarage: {
+      vorhanden: false, flaeche_m2: 0, volumen_m3: 0, anzahl_parkplaetze: 0,
+      hartbetonbelag_m2: 0, aushub_humus_m3: 0, aushub_erde_m3: 0
+    },
+    umgebung: {
+      gartenflaeche_m2: 0, rasenflaeche_m2: 0, befestigte_flaechen_m2: 0,
+      erschliessungswege_m2: 0, anzahl_baeume: 0, anzahl_straeucher: 0,
+      terrassen_m2: 0, balkone_m2: 0
+    },
+    ausmasse: {
+      bodenflaeche_wohnen_m2: 0, bodenflaeche_nass_m2: 0, bodenflaeche_nebenraum_m2: 0,
+      wandflaeche_grundputz_m2: 0, wandflaeche_abrieb_m2: 0, wandflaeche_maler_m2: 0,
+      wandflaeche_platten_m2: 0, deckenflaeche_weissputz_m2: 0, deckenflaeche_maler_m2: 0,
+      beschattung_raffstoren_m2: 0, beschattung_markisen_m2: 0
+    },
+    nutzflaeche_total_m2: 0,
+    bruttogrundflaeche_m2: 0,
+    fassadenflaeche_total_m2: 0,
+    bemerkungen: []
   };
+
+  const sumNullable = (a, b) => (a || 0) + (b || 0);
+  const maxNullable = (a, b) => Math.max(a || 0, b || 0);
 
   results.forEach(r => {
     merged.planTypes.push(r.planTyp || 'unbekannt');
+
+    // Gebäude zusammenführen (duplikate via bezeichnung vermeiden)
+    (r.gebaeude || []).forEach(g => {
+      const existing = merged.gebaeude.find(x => x.bezeichnung === g.bezeichnung);
+      if (existing) {
+        // Vervollständige fehlende Werte
+        Object.keys(g).forEach(k => {
+          if (existing[k] == null && g[k] != null) existing[k] = g[k];
+        });
+      } else merged.gebaeude.push({...g});
+    });
+
     merged.raeume.push(...(r.raeume || []));
     merged.fenster.push(...(r.fenster || []));
+    merged.waende.push(...(r.waende || []));
+    merged.tueren.push(...(r.tueren || []));
 
-    if (r.tueren) {
-      merged.tueren.innen += r.tueren.innen || 0;
-      merged.tueren.aussen += r.tueren.aussen || 0;
-      merged.tueren.balkon_terrasse += r.tueren.balkon_terrasse || 0;
+    if (r.tueren_total) {
+      ['innen','wohnungstuer','hauseingang','balkon_terrasse','gesamt'].forEach(k => {
+        merged.tueren_total[k] = sumNullable(merged.tueren_total[k], r.tueren_total[k]);
+      });
     }
-    if (r.masse) {
-      if (r.masse.nettowohnflaeche_m2) merged.masse.nettowohnflaeche_m2 += r.masse.nettowohnflaeche_m2;
-      if (r.masse.fassadenflaeche_m2) merged.masse.fassadenflaeche_m2 = Math.max(merged.masse.fassadenflaeche_m2, r.masse.fassadenflaeche_m2);
+
+    merged.anzahl_kuechen = sumNullable(merged.anzahl_kuechen, r.anzahl_kuechen);
+    merged.anzahl_baeder  = sumNullable(merged.anzahl_baeder, r.anzahl_baeder);
+    merged.anzahl_wc      = sumNullable(merged.anzahl_wc, r.anzahl_wc);
+
+    if (r.tiefgarage?.vorhanden) {
+      merged.tiefgarage.vorhanden = true;
+      Object.keys(merged.tiefgarage).forEach(k => {
+        if (k !== 'vorhanden' && r.tiefgarage[k] != null) {
+          merged.tiefgarage[k] = maxNullable(merged.tiefgarage[k], r.tiefgarage[k]);
+        }
+      });
     }
-    if (r.gebaeude) {
-      if (r.gebaeude.laenge) merged.gebaeude.laenge = r.gebaeude.laenge;
-      if (r.gebaeude.breite) merged.gebaeude.breite = r.gebaeude.breite;
-      if (r.gebaeude.hoehe_gesamt) merged.gebaeude.hoehe_gesamt = r.gebaeude.hoehe_gesamt;
-      if (r.gebaeude.anzahl_geschosse) merged.gebaeude.anzahl_geschosse = r.gebaeude.anzahl_geschosse;
+
+    if (r.umgebung) {
+      Object.keys(merged.umgebung).forEach(k => {
+        if (r.umgebung[k] != null) merged.umgebung[k] = maxNullable(merged.umgebung[k], r.umgebung[k]);
+      });
     }
+
+    if (r.ausmasse) {
+      Object.keys(merged.ausmasse).forEach(k => {
+        if (r.ausmasse[k] != null) merged.ausmasse[k] = sumNullable(merged.ausmasse[k], r.ausmasse[k]);
+      });
+    }
+
+    if (r.nutzflaeche_total_m2)     merged.nutzflaeche_total_m2     = maxNullable(merged.nutzflaeche_total_m2, r.nutzflaeche_total_m2);
+    if (r.bruttogrundflaeche_m2)    merged.bruttogrundflaeche_m2    = maxNullable(merged.bruttogrundflaeche_m2, r.bruttogrundflaeche_m2);
+    if (r.fassadenflaeche_total_m2) merged.fassadenflaeche_total_m2 = maxNullable(merged.fassadenflaeche_total_m2, r.fassadenflaeche_total_m2);
+
+    if (r.bemerkungen) merged.bemerkungen.push(r.bemerkungen);
   });
 
-  // Aggregate window areas
-  merged.fensterTotal = merged.fenster.reduce((sum, f) => {
-    const area = (f.breite_m || 1.2) * (f.hoehe_m || 1.2) * (f.anzahl || 1);
-    return sum + area;
-  }, 0);
-  merged.fensterAnzahl = merged.fenster.reduce((sum, f) => sum + (f.anzahl || 1), 0);
+  merged.anzahl_gebaeude = merged.gebaeude.length;
 
-  // Sum room areas by type
+  // Aggregate from fenster array (Pkt. 5)
+  merged.fensterAnzahl = merged.fenster.reduce((s, f) => s + (f.anzahl || 1), 0);
+  merged.fensterTotal = merged.fenster.reduce((s, f) => {
+    const a = (f.flaeche_m2 != null) ? f.flaeche_m2 : ((f.breite_m || 1.2) * (f.hoehe_m || 1.2));
+    return s + a * (f.anzahl || 1);
+  }, 0);
+
+  // Wand-Typ-Summen (Pkt. 11)
+  merged.wandtypen = { backstein: 0, beton: 0, leichtbau: 0, unbekannt: 0 };
+  merged.waende.forEach(w => {
+    const t = w.typ || 'unbekannt';
+    merged.wandtypen[t] = (merged.wandtypen[t] || 0) + (w.flaeche_m2 || 0);
+  });
+
+  // Flächen nach Raumtyp
   merged.flaechenByType = {};
   merged.raeume.forEach(r => {
-    const typ = r.typ || 'sonstige';
-    merged.flaechenByType[typ] = (merged.flaechenByType[typ] || 0) + (r.flaeche_m2 || 0);
+    const t = r.typ || 'sonstige';
+    merged.flaechenByType[t] = (merged.flaechenByType[t] || 0) + (r.flaeche_boden_m2 || 0);
   });
 
-  merged.gesamtflaeche = merged.raeume.reduce((s, r) => s + (r.flaeche_m2 || 0), 0);
+  merged.gesamtflaeche = merged.raeume.reduce((s, r) => s + (r.flaeche_boden_m2 || 0), 0);
 
   return merged;
 }
@@ -2624,23 +2695,128 @@ function mergeAnalysisResults(results) {
 function renderAnalysisResults(data, fileNames) {
   const out = document.getElementById('aiResult');
 
-  const typeLabels = { wohnen:'Wohnbereiche', schlafen:'Schlafzimmer', kueche:'Küchen',
-    bad:'Nasszellen', wc:'WC', erschliessung:'Erschliessung', nebenraum:'Nebenräume',
-    keller:'Keller/UG', garage:'Garage', sonstige:'Sonstige' };
+  const typeLabels = {
+    wohnen:'Wohnen', schlafen:'Schlafen', kueche:'Küche', bad:'Bad', wc:'WC', dusche:'Dusche',
+    erschliessung:'Erschliessung', flur:'Flur', treppenhaus:'Treppenhaus', nebenraum:'Nebenraum',
+    keller:'Keller/UG', garage:'Garage', technik:'Technik', terrasse:'Terrasse', balkon:'Balkon', loggia:'Loggia'
+  };
 
-  const flaechenRows = Object.entries(data.flaechenByType)
-    .filter(([,v]) => v > 0)
-    .map(([k,v]) => `<tr><td>${typeLabels[k]||k}</td><td style="text-align:right;font-weight:600">${v.toFixed(1)} m²</td></tr>`)
-    .join('');
+  const fmt = (n, unit='m²') => (n == null || n === 0) ? '–' : `${Number(n).toFixed(1)} ${unit}`;
+  const fmtInt = (n) => (n == null || n === 0) ? '–' : String(n);
 
-  const fensterRows = data.fenster.slice(0,10).map(f =>
-    `<tr>
-      <td>${f.raum||'–'}</td>
-      <td style="text-align:center">${f.anzahl||1}</td>
-      <td style="text-align:center">${f.breite_m ? f.breite_m+'m' : '–'}</td>
-      <td style="text-align:center">${f.hoehe_m ? f.hoehe_m+'m' : '–'}</td>
-      <td style="text-align:right;font-weight:600">${((f.breite_m||1.2)*(f.hoehe_m||1.2)*(f.anzahl||1)).toFixed(1)} m²</td>
+  // Gebäude-Karten (1-4)
+  const gebaeudeCards = (data.gebaeude || []).map(g => `
+    <div style="background:#f9f9f9;border:1px solid var(--br);border-radius:6px;padding:0.75rem;font-size:0.82rem">
+      <div style="font-weight:700;color:var(--red);margin-bottom:0.4rem">${g.bezeichnung || 'Gebäude'}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.35rem;color:var(--gt)">
+        <div>L × B:</div><div style="text-align:right;color:var(--dk)"><strong>${g.laenge_m||'–'} × ${g.breite_m||'–'} m</strong></div>
+        <div>Höhe:</div><div style="text-align:right;color:var(--dk)"><strong>${g.hoehe_gesamt_m ? g.hoehe_gesamt_m+' m' : '–'}</strong></div>
+        <div>Geschosse:</div><div style="text-align:right;color:var(--dk)"><strong>${g.anzahl_geschosse || '–'}</strong></div>
+        <div>Grundfläche:</div><div style="text-align:right;color:var(--dk)"><strong>${fmt(g.grundflaeche_m2)}</strong></div>
+        <div>Volumen:</div><div style="text-align:right;color:var(--dk)"><strong>${fmt(g.volumen_m3, 'm³')}</strong></div>
+        <div>Nutzfläche:</div><div style="text-align:right;color:var(--dk)"><strong>${fmt(g.nutzflaeche_m2)}</strong></div>
+        <div>Erschliessung:</div><div style="text-align:right;color:var(--dk)"><strong>${fmt(g.erschliessung_m2)}</strong></div>
+        <div>Wohnungen:</div><div style="text-align:right;color:var(--dk)"><strong>${g.anzahl_wohnungen || '–'}</strong></div>
+      </div>
+    </div>`).join('');
+
+  // Fensterliste (5)
+  const fensterRows = (data.fenster || []).slice(0, 30).map(f => `
+    <tr style="border-bottom:1px solid var(--br)">
+      <td style="padding:0.3rem 0.5rem;font-weight:600">${f.id || '–'}</td>
+      <td style="padding:0.3rem 0.5rem">${f.raum || '–'}</td>
+      <td style="padding:0.3rem 0.5rem;color:var(--gt);font-size:0.78rem">${f.geschoss || '–'}</td>
+      <td style="text-align:center;padding:0.3rem 0.5rem">${f.anzahl || 1}</td>
+      <td style="text-align:right;padding:0.3rem 0.5rem">${f.breite_m||'–'} × ${f.hoehe_m||'–'}</td>
+      <td style="text-align:right;padding:0.3rem 0.5rem;font-weight:600">${fmt(f.flaeche_m2 || (f.breite_m||0)*(f.hoehe_m||0))}</td>
+      <td style="padding:0.3rem 0.5rem;font-size:0.78rem;color:var(--gt)">${f.typ}</td>
+      <td style="padding:0.3rem 0.5rem;font-size:0.78rem">${f.beschattung !== 'unbekannt' && f.beschattung !== 'keine' ? '🪟 '+f.beschattung : '–'}</td>
     </tr>`).join('');
+
+  // Raumliste mit allen Flächen (7-9)
+  const raumRows = (data.raeume || []).slice(0, 40).map(r => `
+    <tr style="border-bottom:1px solid var(--br)">
+      <td style="padding:0.3rem 0.5rem"><strong>${r.name || r.typ}</strong>
+        <div style="font-size:0.72rem;color:var(--gt)">${r.gebaeude ? r.gebaeude+' · ' : ''}${r.geschoss || ''} ${r.wohnung ? '· '+r.wohnung : ''}</div>
+      </td>
+      <td style="text-align:right;padding:0.3rem 0.4rem;font-weight:600">${fmt(r.flaeche_boden_m2)}</td>
+      <td style="text-align:right;padding:0.3rem 0.4rem">${fmt(r.flaeche_wand_m2)}</td>
+      <td style="text-align:right;padding:0.3rem 0.4rem">${fmt(r.flaeche_decke_m2)}</td>
+      <td style="text-align:right;padding:0.3rem 0.4rem">${fmt(r.raumhoehe_m, 'm')}</td>
+      <td style="text-align:right;padding:0.3rem 0.4rem;color:#1565c0;font-weight:600">${r.plattenbelag_bad_m2 ? fmt(r.plattenbelag_bad_m2) : '–'}</td>
+    </tr>`).join('');
+
+  // Wand-Typen (11)
+  const wandtypen = data.wandtypen || {};
+  const wandHtml = Object.entries(wandtypen).filter(([,v]) => v > 0).map(([k,v]) => `
+    <div style="display:flex;justify-content:space-between;padding:0.35rem 0;border-bottom:1px solid var(--br)">
+      <span style="text-transform:capitalize">${k}</span>
+      <strong>${fmt(v)}</strong>
+    </div>`).join('');
+
+  // Tiefgarage (10, 16)
+  const tg = data.tiefgarage || {};
+  const tgCard = tg.vorhanden ? `
+    <div class="card" style="margin-bottom:1rem;padding:1rem">
+      <div class="card-title" style="margin-bottom:0.6rem">🅿️ Tiefgarage</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0.5rem;font-size:0.85rem">
+        <div><span style="color:var(--gt)">Fläche</span><br><strong>${fmt(tg.flaeche_m2)}</strong></div>
+        <div><span style="color:var(--gt)">Volumen</span><br><strong>${fmt(tg.volumen_m3,'m³')}</strong></div>
+        <div><span style="color:var(--gt)">Parkplätze</span><br><strong>${fmtInt(tg.anzahl_parkplaetze)}</strong></div>
+        <div><span style="color:var(--gt)">Hartbeton</span><br><strong>${fmt(tg.hartbetonbelag_m2)}</strong></div>
+        <div><span style="color:var(--gt)">Humus (0.20m)</span><br><strong>${fmt(tg.aushub_humus_m3,'m³')}</strong></div>
+        <div><span style="color:var(--gt)">Aushub Erde</span><br><strong>${fmt(tg.aushub_erde_m3,'m³')}</strong></div>
+      </div>
+    </div>` : '';
+
+  // Ausmasse (8, 9, 17)
+  const a = data.ausmasse || {};
+  const ausmassCard = `
+    <div class="card" style="margin-bottom:1rem;padding:1rem">
+      <div class="card-title" style="margin-bottom:0.6rem">📐 Ausmasse für Kalkulation</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;font-size:0.83rem">
+        <div>
+          <div style="font-weight:700;color:var(--gt);text-transform:uppercase;font-size:0.72rem;margin-bottom:0.35rem">Böden</div>
+          <div style="display:flex;justify-content:space-between;padding:0.2rem 0"><span>Wohnen (Parkett)</span><strong>${fmt(a.bodenflaeche_wohnen_m2)}</strong></div>
+          <div style="display:flex;justify-content:space-between;padding:0.2rem 0"><span>Nass (Platten)</span><strong>${fmt(a.bodenflaeche_nass_m2)}</strong></div>
+          <div style="display:flex;justify-content:space-between;padding:0.2rem 0"><span>Nebenraum</span><strong>${fmt(a.bodenflaeche_nebenraum_m2)}</strong></div>
+        </div>
+        <div>
+          <div style="font-weight:700;color:var(--gt);text-transform:uppercase;font-size:0.72rem;margin-bottom:0.35rem">Wände</div>
+          <div style="display:flex;justify-content:space-between;padding:0.2rem 0"><span>Grundputz</span><strong>${fmt(a.wandflaeche_grundputz_m2)}</strong></div>
+          <div style="display:flex;justify-content:space-between;padding:0.2rem 0"><span>Abrieb</span><strong>${fmt(a.wandflaeche_abrieb_m2)}</strong></div>
+          <div style="display:flex;justify-content:space-between;padding:0.2rem 0"><span>Maler</span><strong>${fmt(a.wandflaeche_maler_m2)}</strong></div>
+          <div style="display:flex;justify-content:space-between;padding:0.2rem 0"><span>Plattenbelag</span><strong>${fmt(a.wandflaeche_platten_m2)}</strong></div>
+        </div>
+        <div>
+          <div style="font-weight:700;color:var(--gt);text-transform:uppercase;font-size:0.72rem;margin-bottom:0.35rem">Decken</div>
+          <div style="display:flex;justify-content:space-between;padding:0.2rem 0"><span>Weissputz</span><strong>${fmt(a.deckenflaeche_weissputz_m2)}</strong></div>
+          <div style="display:flex;justify-content:space-between;padding:0.2rem 0"><span>Maler</span><strong>${fmt(a.deckenflaeche_maler_m2)}</strong></div>
+        </div>
+        <div>
+          <div style="font-weight:700;color:var(--gt);text-transform:uppercase;font-size:0.72rem;margin-bottom:0.35rem">Beschattung</div>
+          <div style="display:flex;justify-content:space-between;padding:0.2rem 0"><span>Raffstoren</span><strong>${fmt(a.beschattung_raffstoren_m2)}</strong></div>
+          <div style="display:flex;justify-content:space-between;padding:0.2rem 0"><span>Markisen</span><strong>${fmt(a.beschattung_markisen_m2)}</strong></div>
+        </div>
+      </div>
+    </div>`;
+
+  // Umgebung (13-15, 18)
+  const u = data.umgebung || {};
+  const umgebungCard = (u.gartenflaeche_m2 || u.anzahl_baeume || u.terrassen_m2) ? `
+    <div class="card" style="margin-bottom:1rem;padding:1rem">
+      <div class="card-title" style="margin-bottom:0.6rem">🌳 Umgebung & Aussenflächen</div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0.5rem;font-size:0.83rem">
+        <div><span style="color:var(--gt)">Garten</span><br><strong>${fmt(u.gartenflaeche_m2)}</strong></div>
+        <div><span style="color:var(--gt)">Rasen</span><br><strong>${fmt(u.rasenflaeche_m2)}</strong></div>
+        <div><span style="color:var(--gt)">Befestigt</span><br><strong>${fmt(u.befestigte_flaechen_m2)}</strong></div>
+        <div><span style="color:var(--gt)">Wege</span><br><strong>${fmt(u.erschliessungswege_m2)}</strong></div>
+        <div><span style="color:var(--gt)">Bäume</span><br><strong>${fmtInt(u.anzahl_baeume)}</strong></div>
+        <div><span style="color:var(--gt)">Sträucher</span><br><strong>${fmtInt(u.anzahl_straeucher)}</strong></div>
+        <div><span style="color:var(--gt)">Terrassen</span><br><strong>${fmt(u.terrassen_m2)}</strong></div>
+        <div><span style="color:var(--gt)">Balkone</span><br><strong>${fmt(u.balkone_m2)}</strong></div>
+      </div>
+    </div>` : '';
 
   out.innerHTML = `
     <div style="margin-top:1.5rem">
@@ -2649,82 +2825,79 @@ function renderAnalysisResults(data, fileNames) {
         <span style="font-size:0.8rem;color:var(--gt)">${fileNames.length} Plan${fileNames.length>1?'e':''} analysiert</span>
       </div>
 
-      <!-- Key metrics -->
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0.75rem;margin-bottom:1.5rem">
-        ${metric('Gesamtfläche', data.gesamtflaeche.toFixed(1)+' m²', '#d32f2f')}
-        ${metric('Fenster', data.fensterAnzahl+' Stk', '#2196f3')}
-        ${metric('Fensterfläche', data.fensterTotal.toFixed(1)+' m²', '#ff9800')}
-        ${metric('Räume', data.raeume.length+' erkannt', '#4caf50')}
+      <!-- Key Metrics -->
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0.6rem;margin-bottom:1.5rem">
+        ${metric('Gebäude', fmtInt(data.anzahl_gebaeude), '#d32f2f')}
+        ${metric('Nutzfläche', fmt(data.nutzflaeche_total_m2 || data.gesamtflaeche), '#2196f3')}
+        ${metric('Fenster', data.fensterAnzahl + ' / ' + data.fensterTotal.toFixed(0)+'m²', '#ff9800')}
+        ${metric('Türen gesamt', fmtInt(data.tueren_total?.gesamt), '#4caf50')}
+        ${metric('Küchen', fmtInt(data.anzahl_kuechen), '#9c27b0')}
+        ${metric('Bäder', fmtInt(data.anzahl_baeder), '#00bcd4')}
+        ${metric('WCs', fmtInt(data.anzahl_wc), '#607d8b')}
+        ${metric('Räume', fmtInt((data.raeume||[]).length), '#795548')}
       </div>
 
-      <!-- Gebäude -->
-      ${data.gebaeude.laenge||data.gebaeude.anzahl_geschosse ? `
-      <div class="card" style="margin-bottom:1rem;padding:1.25rem">
-        <div class="card-title" style="margin-bottom:0.75rem">🏗️ Gebäudedaten</div>
-        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;font-size:0.875rem">
-          ${data.gebaeude.laenge ? `<div><span style="color:var(--gt)">Länge</span><br><strong>${data.gebaeude.laenge} m</strong></div>` : ''}
-          ${data.gebaeude.breite ? `<div><span style="color:var(--gt)">Breite</span><br><strong>${data.gebaeude.breite} m</strong></div>` : ''}
-          ${data.gebaeude.hoehe_gesamt ? `<div><span style="color:var(--gt)">Gesamthöhe</span><br><strong>${data.gebaeude.hoehe_gesamt} m</strong></div>` : ''}
-          ${data.gebaeude.anzahl_geschosse ? `<div><span style="color:var(--gt)">Geschosse</span><br><strong>${data.gebaeude.anzahl_geschosse}</strong></div>` : ''}
-        </div>
+      ${gebaeudeCards ? `
+      <div class="card" style="margin-bottom:1rem;padding:1rem">
+        <div class="card-title" style="margin-bottom:0.75rem">🏗️ Gebäude (${data.anzahl_gebaeude})</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:0.6rem">${gebaeudeCards}</div>
       </div>` : ''}
 
-      <!-- Raumflächen -->
-      ${flaechenRows ? `
-      <div class="card" style="margin-bottom:1rem;padding:1.25rem">
-        <div class="card-title" style="margin-bottom:0.75rem">📐 Raumflächen nach Typ</div>
-        <table style="width:100%;font-size:0.875rem;border-collapse:collapse">
-          <thead><tr style="border-bottom:2px solid var(--br)">
-            <th style="text-align:left;padding:0.4rem 0;font-size:0.75rem;color:var(--gt);text-transform:uppercase">Raumtyp</th>
-            <th style="text-align:right;padding:0.4rem 0;font-size:0.75rem;color:var(--gt);text-transform:uppercase">Fläche</th>
-          </tr></thead>
-          <tbody>${flaechenRows}</tbody>
-          <tfoot><tr style="border-top:2px solid var(--br);font-weight:700">
-            <td style="padding:0.5rem 0">Total erkannte Fläche</td>
-            <td style="text-align:right;color:var(--red)">${data.gesamtflaeche.toFixed(1)} m²</td>
-          </tfoot>
-        </table>
+      ${ausmassCard}
+
+      ${tgCard}
+
+      ${umgebungCard}
+
+      ${wandHtml ? `
+      <div class="card" style="margin-bottom:1rem;padding:1rem">
+        <div class="card-title" style="margin-bottom:0.6rem">🧱 Wandtypen (aus Schraffur-Analyse)</div>
+        ${wandHtml}
       </div>` : ''}
 
-      <!-- Räume Detail -->
-      ${data.raeume.length > 0 ? `
-      <div class="card" style="margin-bottom:1rem;padding:1.25rem">
-        <div class="card-title" style="margin-bottom:0.75rem">🏠 Alle erkannten Räume</div>
-        <div style="max-height:250px;overflow-y:auto">
-        <table style="width:100%;font-size:0.82rem;border-collapse:collapse">
-          <thead style="position:sticky;top:0;background:white"><tr style="border-bottom:2px solid var(--br)">
-            <th style="text-align:left;padding:0.4rem 0.5rem;color:var(--gt)">Raum</th>
-            <th style="text-align:right;padding:0.4rem 0.5rem;color:var(--gt)">Fläche</th>
-            <th style="text-align:right;padding:0.4rem 0.5rem;color:var(--gt)">Raumhöhe</th>
-          </tr></thead>
-          <tbody>${data.raeume.map(r=>`
-            <tr style="border-bottom:1px solid var(--br)">
-              <td style="padding:0.4rem 0.5rem">${r.name||r.typ}</td>
-              <td style="text-align:right;padding:0.4rem 0.5rem;font-weight:600">${r.flaeche_m2 ? r.flaeche_m2.toFixed(1)+' m²' : '–'}</td>
-              <td style="text-align:right;padding:0.4rem 0.5rem;color:var(--gt)">${r.raumhoehe_m ? r.raumhoehe_m+' m' : '–'}</td>
-            </tr>`).join('')}
-          </tbody>
-        </table>
-        </div>
-      </div>` : ''}
-
-      <!-- Fenster -->
       ${fensterRows ? `
-      <div class="card" style="margin-bottom:1rem;padding:1.25rem">
-        <div class="card-title" style="margin-bottom:0.75rem">🪟 Fenster (${data.fensterAnzahl} Stk · ${data.fensterTotal.toFixed(1)} m² gesamt)</div>
-        <table style="width:100%;font-size:0.82rem;border-collapse:collapse">
-          <thead><tr style="border-bottom:2px solid var(--br)">
-            <th style="text-align:left;padding:0.4rem 0.5rem;color:var(--gt)">Raum</th>
-            <th style="text-align:center;padding:0.4rem 0.5rem;color:var(--gt)">Anz.</th>
-            <th style="text-align:center;padding:0.4rem 0.5rem;color:var(--gt)">Breite</th>
-            <th style="text-align:center;padding:0.4rem 0.5rem;color:var(--gt)">Höhe</th>
-            <th style="text-align:right;padding:0.4rem 0.5rem;color:var(--gt)">Fläche</th>
+      <div class="card" style="margin-bottom:1rem;padding:1rem">
+        <div class="card-title" style="margin-bottom:0.6rem">🪟 Fensterliste (${data.fensterAnzahl} Stk · ${data.fensterTotal.toFixed(1)} m²)</div>
+        <div style="max-height:300px;overflow-y:auto">
+        <table style="width:100%;font-size:0.8rem;border-collapse:collapse">
+          <thead style="position:sticky;top:0;background:white"><tr style="border-bottom:2px solid var(--br)">
+            <th style="text-align:left;padding:0.3rem 0.5rem;font-size:0.72rem;color:var(--gt)">ID</th>
+            <th style="text-align:left;padding:0.3rem 0.5rem;font-size:0.72rem;color:var(--gt)">Raum</th>
+            <th style="text-align:left;padding:0.3rem 0.5rem;font-size:0.72rem;color:var(--gt)">Gesch.</th>
+            <th style="text-align:center;padding:0.3rem 0.5rem;font-size:0.72rem;color:var(--gt)">Anz</th>
+            <th style="text-align:right;padding:0.3rem 0.5rem;font-size:0.72rem;color:var(--gt)">B × H</th>
+            <th style="text-align:right;padding:0.3rem 0.5rem;font-size:0.72rem;color:var(--gt)">Fläche</th>
+            <th style="text-align:left;padding:0.3rem 0.5rem;font-size:0.72rem;color:var(--gt)">Typ</th>
+            <th style="text-align:left;padding:0.3rem 0.5rem;font-size:0.72rem;color:var(--gt)">Beschatt.</th>
           </tr></thead>
           <tbody>${fensterRows}</tbody>
         </table>
+        </div>
       </div>` : ''}
 
-      <!-- Apply button -->
+      ${raumRows ? `
+      <div class="card" style="margin-bottom:1rem;padding:1rem">
+        <div class="card-title" style="margin-bottom:0.6rem">🏠 Raumliste mit Ausmassen</div>
+        <div style="max-height:350px;overflow-y:auto">
+        <table style="width:100%;font-size:0.8rem;border-collapse:collapse">
+          <thead style="position:sticky;top:0;background:white"><tr style="border-bottom:2px solid var(--br)">
+            <th style="text-align:left;padding:0.35rem 0.5rem;font-size:0.72rem;color:var(--gt)">Raum</th>
+            <th style="text-align:right;padding:0.35rem 0.4rem;font-size:0.72rem;color:var(--gt)">Boden</th>
+            <th style="text-align:right;padding:0.35rem 0.4rem;font-size:0.72rem;color:var(--gt)">Wand</th>
+            <th style="text-align:right;padding:0.35rem 0.4rem;font-size:0.72rem;color:var(--gt)">Decke</th>
+            <th style="text-align:right;padding:0.35rem 0.4rem;font-size:0.72rem;color:var(--gt)">Höhe</th>
+            <th style="text-align:right;padding:0.35rem 0.4rem;font-size:0.72rem;color:#1565c0">Platten Bad</th>
+          </tr></thead>
+          <tbody>${raumRows}</tbody>
+        </table>
+        </div>
+      </div>` : ''}
+
+      ${data.bemerkungen?.length ? `
+      <div class="alert alert-info" style="margin-bottom:1rem;font-size:0.82rem">
+        <strong>Bemerkungen der KI:</strong><br>${data.bemerkungen.join(' · ')}
+      </div>` : ''}
+
       <button class="btn-red" style="width:100%;padding:1rem;font-size:1rem" onclick='applyAI(${JSON.stringify(data).replace(/'/g,"&#39;")})'>
         ✅ Alle Daten in Kalkulation übernehmen
       </button>
@@ -2745,40 +2918,42 @@ function applyAI(d) {
 
   const b = S.buildings[0];
 
-  // Apply building geometry from plan
-  if (d.gebaeude) {
-    if (d.gebaeude.laenge)          b.len    = d.gebaeude.laenge;
-    if (d.gebaeude.breite)          b.wid    = d.gebaeude.breite;
-    if (d.gebaeude.anzahl_geschosse) b.floors = d.gebaeude.anzahl_geschosse;
-    if (d.gebaeude.hoehe_gesamt)    b.height = +(d.gebaeude.hoehe_gesamt / Math.max(b.floors,1)).toFixed(1);
-  }
+  // Gebäude aus Array (Neue Schema-Struktur)
+  const g = (d.gebaeude && d.gebaeude[0]) || {};
+  if (g.laenge_m)         b.len    = g.laenge_m;
+  if (g.breite_m)         b.wid    = g.breite_m;
+  if (g.anzahl_geschosse) b.floors = g.anzahl_geschosse;
+  if (g.hoehe_gesamt_m)   b.height = +(g.hoehe_gesamt_m / Math.max(b.floors,1)).toFixed(1);
 
-  // Apply room areas by type
+  // Flächen nach Raumtyp
   const byType = d.flaechenByType || {};
   const wohn = (byType.wohnen||0) + (byType.schlafen||0);
   if (wohn > 0)                       b.living  = +wohn.toFixed(1);
   if (byType.kueche > 0)              b.kitchen = +(byType.kueche).toFixed(1);
-  if ((byType.bad||0)+(byType.wc||0)) b.bath    = +((byType.bad||0)+(byType.wc||0)).toFixed(1);
+  const badTotal = (byType.bad||0) + (byType.wc||0) + (byType.dusche||0);
+  if (badTotal > 0)                   b.bath    = +badTotal.toFixed(1);
 
-  // Floor areas from total
-  if (d.gesamtflaeche > 0) {
-    b.parkett = +(d.gesamtflaeche * 0.65).toFixed(1);
-    b.tiles   = +(d.gesamtflaeche * 0.30).toFixed(1);
-  }
+  // Bodenbeläge direkt aus Ausmassen (präziser als Schätzung)
+  const a = d.ausmasse || {};
+  if (a.bodenflaeche_wohnen_m2 > 0) b.parkett = +a.bodenflaeche_wohnen_m2.toFixed(1);
+  if (a.bodenflaeche_nass_m2 > 0)   b.tiles   = +a.bodenflaeche_nass_m2.toFixed(1);
 
   S.buildings[0] = b;
 
-  // Summary for user
+  // Summary für User
   const lines = [
-    `✅ KI-Analyse aus ${AI.source} übernommen`,
+    `✅ KI-Analyse übernommen (${AI.source})`,
     '',
-    `📐 Gebäude: ${b.len}m × ${b.wid}m · ${b.floors} Geschosse`,
+    `🏗️ ${d.anzahl_gebaeude || 1} Gebäude · ${b.len}m × ${b.wid}m · ${b.floors} Geschosse`,
     `🏠 Wohnfläche: ${b.living} m²  ·  Küche: ${b.kitchen} m²  ·  Bad: ${b.bath} m²`,
-    `🪟 Fenster: ${d.fensterAnzahl||'?'} Stk · ${d.fensterTotal?.toFixed(1)||'?'} m² → BKP 231`,
-    `🚪 Türen: ${AI.doorInner||'?'} innen · ${AI.doorOuter||'?'} aussen · ${AI.doorBalcony||'?'} Balkon`,
+    `🪟 ${AI.windowCount || '?'} Fenster · ${AI.windowArea?.toFixed(1) || '?'} m²`,
+    `🚪 ${AI.doorTotal || '?'} Türen total`,
+    `🍳 ${AI.kitchens || '?'} Küchen  ·  🛁 ${AI.baths || '?'} Bäder  ·  🚽 ${AI.wcs || '?'} WCs`,
+    d.tiefgarage?.vorhanden ? `🅿️ Tiefgarage: ${d.tiefgarage.anzahl_parkplaetze || '?'} PP · ${d.tiefgarage.flaeche_m2?.toFixed(0) || '?'} m²` : '',
+    d.umgebung?.anzahl_baeume ? `🌳 ${d.umgebung.anzahl_baeume} Bäume · ${d.umgebung.anzahl_straeucher || 0} Sträucher` : '',
     '',
-    '→ BKP Kalkulation wurde automatisch mit diesen Werten befüllt.'
-  ];
+    '→ BKP Kalkulation wurde mit Ausmassen befüllt.'
+  ].filter(Boolean);
   alert(lines.join('\n'));
   goTo('bkp');
 }
@@ -2910,40 +3085,88 @@ function renderDevOverview() {
 // ─── AI DATA STORE ───────────────────────────────────────────────────────
 // Holds extracted values from Claude plan analysis
 const AI = {
-  windowArea: null,     // m² total from plans
-  windowCount: null,    // number of windows
-  doorInner: null,      // inner doors count
-  doorOuter: null,      // outer doors
-  doorBalcony: null,    // balcony/terrace doors
-  rooms: [],            // [{name, flaeche_m2, typ, raumhoehe_m}]
-  building: {},         // {laenge, breite, hoehe_gesamt, anzahl_geschosse}
-  source: null          // filename(s) analysed
+  windowArea: null,     // m² total Fenster
+  windowCount: null,    // Anzahl Fenster
+  doorInner: null,      // Innentüren
+  doorOuter: null,      // Aussentüren/Hauseingang
+  doorBalcony: null,    // Balkon/Terrassentüren
+  doorTotal: null,      // Alle Türen
+  rooms: [],            // komplette Raumliste
+  windows: [],          // komplette Fensterliste
+  buildings: [],        // alle Gebäude
+  walls: [],            // Wandtypen
+  kitchens: null,       // Anzahl Küchen
+  baths: null,          // Anzahl Bäder
+  wcs: null,            // Anzahl WCs
+  // Aggregierte Ausmasse für Kostenpositionen
+  ausmasse: {},         // {bodenflaeche_wohnen_m2, wandflaeche_maler_m2, ...}
+  tiefgarage: {},
+  umgebung: {},
+  source: null          // filenames
 };
 
 // Called from applyAI - stores all extracted data
 function storeAIData(d) {
+  // Fenster
   if (d.fensterTotal > 0)   AI.windowArea   = Math.round(d.fensterTotal * 100) / 100;
   if (d.fensterAnzahl > 0)  AI.windowCount  = d.fensterAnzahl;
-  if (d.tueren) {
-    if (d.tueren.innen)            AI.doorInner   = d.tueren.innen;
-    if (d.tueren.aussen)           AI.doorOuter   = d.tueren.aussen;
-    if (d.tueren.balkon_terrasse)  AI.doorBalcony = d.tueren.balkon_terrasse;
-  }
-  if (d.raeume)    AI.rooms    = d.raeume;
-  if (d.gebaeude)  AI.building = d.gebaeude;
+  AI.windows = d.fenster || [];
+
+  // Türen (neue Schema-Struktur: tueren_total)
+  const tt = d.tueren_total || {};
+  if (tt.innen)            AI.doorInner   = tt.innen;
+  if (tt.hauseingang)      AI.doorOuter   = tt.hauseingang;
+  if (tt.balkon_terrasse)  AI.doorBalcony = tt.balkon_terrasse;
+  if (tt.gesamt)           AI.doorTotal   = tt.gesamt;
+
+  // Räume + Gebäude
+  if (d.raeume)    AI.rooms     = d.raeume;
+  if (d.gebaeude)  AI.buildings = d.gebaeude;
+  if (d.waende)    AI.walls     = d.waende;
+
+  // Zähler
+  if (d.anzahl_kuechen) AI.kitchens = d.anzahl_kuechen;
+  if (d.anzahl_baeder)  AI.baths    = d.anzahl_baeder;
+  if (d.anzahl_wc)      AI.wcs      = d.anzahl_wc;
+
+  // Aggregate Ausmasse (direkt aus KI)
+  if (d.ausmasse)   AI.ausmasse   = d.ausmasse;
+  if (d.tiefgarage) AI.tiefgarage = d.tiefgarage;
+  if (d.umgebung)   AI.umgebung   = d.umgebung;
 }
 
 // Override formula quantity with AI value for specific positions
 function aiOverride(pos, formulaQty) {
-  if (!AI.source) return formulaQty; // no AI data loaded
+  if (!AI.source) return formulaQty;
+  const a = AI.ausmasse || {};
+  const tg = AI.tiefgarage || {};
+  const u = AI.umgebung || {};
   const overrides = {
-    '231': AI.windowArea,        // Fenster 2-fach
-    '232': null,                  // 3-fach – user decides
-    '233': AI.doorOuter,          // Haustüre
-    '234': AI.doorBalcony,        // Balkontüren
-    '251': AI.doorInner,          // Zimmertüren
-    '261': null,                   // Parkett – from building data
-    '262': null,                   // Fliesen – from building data
+    // Fenster + Türen
+    '231': AI.windowArea,              // Fenster 2-fach
+    '233': AI.doorOuter,                // Haustüre
+    '234': AI.doorBalcony,              // Balkontüren
+    '251': AI.doorInner,                // Zimmertüren
+    // Böden (aus neuen Ausmassen)
+    '261': a.bodenflaeche_wohnen_m2,   // Parkett
+    '262': a.bodenflaeche_nass_m2,     // Fliesen Boden
+    // Wände
+    '271': a.wandflaeche_grundputz_m2, // Grundputz
+    '272': a.wandflaeche_abrieb_m2,    // Abrieb
+    '273': a.wandflaeche_maler_m2,     // Maler Wände
+    '274': a.wandflaeche_platten_m2,   // Plattenbelag Wand
+    // Decken
+    '281': a.deckenflaeche_weissputz_m2,
+    '282': a.deckenflaeche_maler_m2,
+    // Beschattung
+    '283': a.beschattung_raffstoren_m2,
+    '284': a.beschattung_markisen_m2,
+    // Tiefgarage
+    '211': tg.aushub_humus_m3 ? (tg.aushub_humus_m3 + (tg.aushub_erde_m3||0)) : null,  // Aushub total
+    '212': tg.hartbetonbelag_m2,       // Hartbetonbelag TG
+    // Umgebung
+    '411': u.gartenflaeche_m2,         // Gartenanlage
+    '412': u.befestigte_flaechen_m2,   // Befestigte Flächen
   };
   const v = overrides[pos];
   return (v !== null && v !== undefined && v > 0) ? Math.round(v * 100) / 100 : formulaQty;
